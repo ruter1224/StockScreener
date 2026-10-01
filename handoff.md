@@ -87,9 +87,19 @@ FinMind 隱私權政策第 10 條對用戶的唯一要求是「妥善保管存�
 
 先前建議「併發 5～10」是錯的，已收回。官方壓力測試顯示伺服器可承受 10～50 requests/秒，但瓶頸是帳度額度（0.167/秒），併發只會瞬間燒光當小時額度後吃 402。
 
+## ⚠️ 本機 Chezmoi 待處理（與本專案無關，但影響另一台電腦）
+
+`chezmoi status` 顯示約 50 個 skill 檔案為 `DA` 狀態（`My-SpecSkill`、`gstack/*`、`vercel-react-best-practices`）。含義是：**本機實體檔案仍存在，但 chezmoi 認為它們應該被刪除。**
+
+這是「技能精簡計畫」的未完成收尾。需要在本機跑 `chezmoi apply` 才會真正刪除，本地實體檔案才會消失。
+
+本次收工**未執行** `chezmoi apply`（會刪除設定檔，非本次任務範圍，且需另行確認）。
+
+另注意：本 repo 尚未設定 git remote。
+
 ## 🕐 最後更新
 
 - 時間：2026-10-01
 - 更新者：OpenCode @ LAP2021-T153
 - Git push：❌ 未推（本 repo 尚未設定 remote）
-- Chezmoi push：—（無變動，本次未處理）
+- Chezmoi push：✅ 無待推變動（HEAD `e23a668` 已與 origin/master 同步）

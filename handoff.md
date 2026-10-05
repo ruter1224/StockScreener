@@ -5,7 +5,7 @@
 設計階段全部定稿，**尚未寫任何程式碼**。
 
 - 完整設計文件：`docs/superpowers/specs/2026-10-01-finmind-data-pipeline-design.md`（13 節，canonical）
-- repo 狀態：只有 `docs/` 一個目錄，master 分支，無 commit 歷史
+- repo 狀態：master 分支、2 個 commit，remote `origin` = `ruter1224/StockScreener`（GitHub 私有）
 
 已確認的決策（細節與依據在 spec）：
 
@@ -24,7 +24,7 @@
 - 可運行：**否**，專案還沒有可執行的程式
 - 介面：未開始
 - 資料：尚未下載任何資料
-- Git：**尚未建立第一個 commit，且未設定 remote**
+- Git：**2 個 commit（`4eeef80`），已推上 `origin/master`，兩台電腦可同步**
 
 ## ➡️ 下一步
 
@@ -95,11 +95,13 @@ FinMind 隱私權政策第 10 條對用戶的唯一要求是「妥善保管存�
 
 本次收工**未執行** `chezmoi apply`（會刪除設定檔，非本次任務範圍，且需另行確認）。
 
-另注意：本 repo 尚未設定 git remote。
+> **2026-10-02 補充**：本節描述的 `DA` 待 apply 狀況已解除 —— 當天在 `DESKTOP-5241OJK` 實跑 `chezmoi status` 結果為乾淨（無待處理變動）。本節保留作為歷史紀錄。
+>
+> 本 repo 的 git remote 已於 2026-10-02 補上，見文末「最後更新」。
 
 ## 🕐 最後更新
 
 - 時間：2026-10-01
 - 更新者：OpenCode @ LAP2021-T153
-- Git push：❌ 未推（本 repo 尚未設定 remote）
+- Git push：✅ 已推（`origin/master` = `4eeef80`，`https://github.com/ruter1224/StockScreener`，PRIVATE）
 - Chezmoi push：✅ 無待推變動（HEAD `e23a668` 已與 origin/master 同步）

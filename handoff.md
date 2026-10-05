@@ -101,7 +101,7 @@ FinMind 隱私權政策第 10 條對用戶的唯一要求是「妥善保管存�
 
 ## 🕐 最後更新
 
-- 時間：2026-10-01
+- 時間：2026-10-05
 - 更新者：OpenCode @ LAP2021-T153
-- Git push：✅ 已推（`origin/master` = `4eeef80`，`https://github.com/ruter1224/StockScreener`，PRIVATE）
-- Chezmoi push：✅ 無待推變動（HEAD `e23a668` 已與 origin/master 同步）
+- Git push：✅ 已推（`origin/master` = `40342e1`，`https://github.com/ruter1224/StockScreener`，PRIVATE）
+- Chezmoi push：✅ 無待推變動（`chezmoi status` 乾淨）

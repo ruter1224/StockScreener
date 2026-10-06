@@ -498,28 +498,43 @@ Streamlit。三個主要頁面：
 
 ## 12. 執行順序
 
+> OK **2026-10-06 更新**：階段 0、1 已完成。
+> `pyproject.toml` / `.python-version` / `uv.lock` / `fetch.py` /
+> `src/core/` / `src/storage/` / `tests/`（35 個測試全過）。
+> 使用方式見 `README.md`。
+
 ```
-階段 0  專案骨架
-        pyproject / .python-version / uv.lock / .gitignore / start.bat
-        config/ 三個設定檔
+[完成] 階段 0  專案骨架
+        pyproject / .python-version / uv.lock / .gitignore
       ↓
-階段 1  抓取層
-        client / datasets 註冊表 / writer / sync_state
-        掛機抓全量
+[完成] 階段 1  抓取層
+        finmind_client / sync_state / writer / fetch.py
+        dataset 已分類：財務類 / 行情類 / 全域型
       ↓
-階段 2  財務指標計算
+[進行] 階段 2  財務指標計算（下一步）
         ROE（多年平均 + TTM）／杜邦五項／TTM EPS／營收 CAGR
       ↓
-階段 3  篩選 + 評分 + 估值
+[待做] 階段 3  篩選 + 評分 + 估值
         screening / scoring / valuation
       ↓
-階段 4  Streamlit 介面
+[待做] 階段 4  Streamlit 介面
 ```
 
 **階段 1 不可跳**：raw 表 schema 需依實測結果建 DDL。
 照文件猜錯欄位會讓全量抓取白跑。
 
----
+### 抓取實作要點（已驗證）
+
+| 項目 | 內容 |
+|---|---|
+| 股票池 | 全部證券 2507 檔（ETF 保留）／有財報 2037 檔 |
+| dataset 分類 | 財務類只抓個股、行情類抓全部、全域型 1 次就完 |
+| 續傳 | 每檔完成即寫 Parquet + commit SQLite，中斷 rerun 自動續 |
+| 速率 | 540 次/小時（額度 600 留緩衝）|
+| 安全 | 4xx 連續 3 次熔斷／403 ip banned 立即停／402 額度用盡立即停 |
+| 單一 dataset 耗時 | 約 4 小時，建議分天抓 |
+| Parquet 容量 | 約 10KB/檔，2037 檔約 20MB |
+
 
 ## 13. 已知未解問題
 

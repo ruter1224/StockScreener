@@ -94,6 +94,38 @@ uv run python fetch.py --dataset TaiwanStockBalanceSheet --max-seconds 3600
 - `402` 額度用盡立即停止
 - 5xx／網路錯誤才重試（最多 3 次）
 
+## ➡️ 下一步
+
+### 兩台電腦分工（重要）
+
+⚠️ **額度是帳號層級 600 次/小時，兩台不能同時抓。**
+
+| 機器 | 任務 |
+|---|---|
+| **家裡那台** | 全量抓取（分天，單一 dataset 約 4 小時）|
+| **這台** | 階段 2 財務指標計算 |
+
+### 家裡那台的指令
+
+```bash
+git pull
+uv sync
+uv run python fetch.py --global-only                              # 5 秒
+uv run python fetch.py --dataset TaiwanStockFinancialStatements   # 約 4 小時
+uv run python fetch.py --status                                    # 看進度
+```
+
+中斷就重跑同一指令，會自動續傳。
+
+### 階段 2 待做（本機）
+
+1. **實算篩選剩幾檔**（原未解問題 #2，需財務指標先算出來）
+   ⚠️ 記得 `align_score` 無資料來源，實際可用條件是**三個不是四個**
+2. ROE 多年平均（3 年／5 年）＋ TTM ROE 參考顯示
+3. 杜邦五項（`IncomeAfterTaxes` 不可用 `NetIncome`，後者只有 20 期）
+4. 營收 CAGR（`TaiwanStockMonthRevenue`，⚠️ 用 `revenue_year`+`revenue_month` 不是 `date`）
+5. 還原股價合併 `DividendResult` + `ParValueChange` + `SplitPrice`
+
 ## ✅ 已完成（10-06）
 
 1. 資料來源 26 項實測（額度、可用性、靜默錯誤陷阱全部有依據）
@@ -192,8 +224,8 @@ PowerShell 的 `Set-Content -Encoding UTF8` 會加 BOM，`uv` 讀不了。
 
 - 時間：2026-10-06（收工）
 - 更新者：OpenCode @ LAP2021-T153
-- HEAD：`8f7b092`（更新 handoff 與規格書：記錄抓取程式完成狀態）
-- Git push：✅ 已推（local == origin/master）
+- HEAD：`757c28d`（收工：補記本次踩坑與驗證證據）
+- Git push：✅ 已推（local `757c28d` == origin/master）
 - Chezmoi push：—（無變動）
 - 目標驗證：✅ 35 個單元測試通過（`uv run python -m unittest discover tests`）
 - 目標驗證：✅ ruff 全過（`uv run ruff check src fetch.py tests`）

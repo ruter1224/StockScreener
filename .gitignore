@@ -29,3 +29,5 @@ Thumbs.db
 # Playwright MCP �I�Ͽ�X
 .playwright-mcp/
 _shots/
+# uv 依賴鎖（必須進版控以確保兩台電腦版本一致）
+# .venv 已在上方忽略

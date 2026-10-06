@@ -508,7 +508,7 @@ ROE = 稅賦優勢 × 業外獲利比 × 利益率 × 資產周轉率 × 財務�
 | 13 | 安全邊際門檻（講義 >100% 從未驗證，「長期價值 > 80%」語意矛盾） | §4.10 |
 | 14 | 風險折扣要先做還是自己訂規則 | §4.11 |
 | 15 | 長期價值假設「公司 EPS 成長率 = 產業 CAGR」是否加修正 | §4.9 |
-| 22 | **🔴 已還原股價無免費路徑** | FinMind 官方確認 `TaiwanStockPriceAdj` 需 Backer；Yahoo 被擋；官方無歷史除權息。**自建還原已確認不可行**（缺除權息基準價，`TaiwanStockDividend` 2015–2018 每年僅 1 筆）。→ 買 Backer／換網路／改設計不用報酬率類指標，三選一 | handoff「未還原價的限制」 |
+| 22 | ~~🔴 已還原股價無免費路徑~~ → **✅ 已解決（測試 16–19）** | 原結論錯在**測錯 dataset 名稱**。正確來源 `TaiwanStockDividendResult` 免 token 提供官方 `reference_price` 與 `before_price`。因子 = `reference_price / before_price`，10 檔 151 筆驗證通過（`before_price` 與 Price 前收一致率 151/151，精度優於自算公式）。→ **不需買 Backer、不需換網路、不需改設計** | `data-source-verification.md` §測試 16–19 |
 
 ---
 
@@ -522,8 +522,9 @@ ROE = 稅賦優勢 × 業外獲利比 × 利益率 × 資產周轉率 × 財務�
 | FinMind 財務報表 | ✅ | **免 token 可用**、11 年歷史、已轉單季 |
 | FinMind `TaiwanStockInfo` | ✅ | 4,329 列，變更事件流（§1.1 已記錄）|
 | FinMind `TaiwanStockTradingDate` | ✅ | 6,936 個交易日（1999–2026），免費日曆 |
-| FinMind `TaiwanStockDividend` | ⚠️ | 有除息日與每股股利，**缺除權息基準價** |
-| FinMind `TaiwanStockPriceAdj` | ❌ | **官方明確回覆需 Backer**（非環境問題）|
+| FinMind `TaiwanStockDividend` | ⚠️ | 有除息日與每股股利，**缺除權息基準價**（單獨用不足）|
+| **FinMind `TaiwanStockDividendResult`** | ✅ | **官方 `reference_price` + `before_price`，免 token 可用 → 已還原股價的正解**（測試 19）|
+| FinMind `TaiwanStockPriceAdj` | ❌ | **官方明確回覆需 Backer**（非環境問題）。但已不需要此 dataset |
 | TWSE `MI_INDEX` table[8] | ✅ | 上市單日行情，欄位 16 個 |
 | TWSE 月營收 `t187ap05_L` | ✅ | **注意：不是除權息**，含當月/去年同月營收＋產業別 |
 | TPEx `stk_quote_result.php` | ⚠️ | **日期參數無效**（永遠回當日）、**不含興櫃**、多數是 ETF → 降為交叉驗證用途 |
@@ -551,6 +552,38 @@ ROE = 稅賦優勢 × 業外獲利比 × 利益率 × 資產周轉率 × 財務�
 
 實測依據：20 檔 10.2 秒、0 失敗、每檔平均 2,808 期。
 ⚠️ 免費額度**不能省略 `stock_id`** 一次拿全市場，必須逐股呼叫。
+
+### 已還原股價定案（測試 16–19）
+
+| 項目 | 結論 |
+|---|---|
+| 因子公式 | **`factor = reference_price / before_price`** |
+| 資料源 | `TaiwanStockPrice`（未還原 OHLC）+ `TaiwanStockDividendResult`（官方參考價）|
+| 是否需 Backer | **不需要**，兩者皆免 token |
+| `before_price` 可靠性 | 10 檔 151 筆，與 `TaiwanStockPrice` 前收**一致率 151/151** |
+| 精度 | 平均偏差 0.750%，優於自算公式 0.951% |
+| 涵蓋期間 | 2015-06 ～ 2026-09 |
+| 是否需改設計 | **不需要**，長區間報酬率／股價通道／追價安全圈全部照常可用 |
+
+⚠️ 殘餘限制：股價資料起於 2015-01-05，該日之前的事件無法還原（2 年／5 年區間不受影響）。
+
+⚠️ **Google 搜到的公式不可用**：`factor = (前收 − 現金股利) / 前收` 只對純現金股利有效。
+遇到股票股利會錯（2317 2016 差 7.59 元、2454 差 16 元），
+且換算配股率需要股面額，而免費資料不含股面額。
+官方 `reference_price` 已含全部調整，無需自行區分。
+
+⚠️ **收回先前兩項誤判**：
+1. 「股利 2015–2018 每年僅 1 筆 = 資料缺漏」→ **錯**，2330 2019 年才改季度配息
+2. 「自建還原不可行」→ **錯**，測錯 dataset 名稱（測了 `TaiwanStockCapitalReductionReferencePrice`，
+   正確是 `TaiwanStockDividendResult`）
+
+### 靜默錯誤教訓（本輪追加）
+
+| 錯誤 | 為什麼沒報錯 |
+|---|---|
+| **測錯 dataset 名稱就宣布不可行** | 名字相近的 dataset 回空資料，看起來像「官方沒有」|
+| **用錯方法驗證公式** | 拿除息日收盤比參考價，把真實漲跌誤判成公式誤差 |
+| **把正確的稀疏資料當缺漏** | 沒查配息政策變化就直接歸因資料品質 |
 
 ### ⚠️ 靜默錯誤教訓（本輪踩到的）
 

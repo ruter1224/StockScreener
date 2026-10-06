@@ -32,27 +32,36 @@
 
 ## ➡️ 下一步
 
-1. **驗證三個靜默錯誤項目**（寫程式前必須做，錯了不會報錯）：
-   - `EPS` 欄位是否也轉單季（`origin_name` = 基本每股盈餘）
-   - `NetIncome` vs `IncomeAfterTaxes` 差異（中文名幾乎相同，影響 D8 分子）
-   - `TaiwanStockBalanceSheet` 的 `_per` 後綴意義（`CapitalStock` 與 `CapitalStock_per` 中文同名）
-2. **決定已還原股價的解法**（🔴 阻塞）：買 FinMind Backer／換網路用 yfinance／改設計不用報酬率類指標
-3. 定案衝突 1 的甲乙丙（模式如何分派），以及安全邊際門檻門檻值
+1. **驗證月營收 `t187ap05_L` 歷史深度** —— 決定營收 CAGR 能算幾年
+2. **實測免費額度** —— 600 requests/小時的實際限制，影響全量同步排程
+3. 定案衝突 1 的甲乙丙（模式如何分派），以及安全邊際門檻值
 4. 之後才建專案骨架與抓取層
 
 ## ⚠️ 注意事項
 
-### 🔴 已還原股價：目前無任何免費路徑
+### ✅ 已還原股價：已找到免費官方解法（原先的「無解」結論是錯的）
 
-長區間（>1 年）報酬率需 Adj Close。三條路都已實測排除其他可能：
-- yfinance／Yahoo：**本機網路層被擋**（DNS 解析到 180.222.109.251，TCP 不通；同時 TWSE 通）
-- 自行用除權息還原：TWSE `TWT48U` **忽略 `stockNo` 參數**且只給「預告表」非歷史，官方無歷史除權息端點
-- FinMind `TaiwanStockPriceAdj`：需 Backer 付費
+**因子公式**：`factor = reference_price / before_price`
 
-### 兩個靜默錯誤陷阱（已記入實測記錄）
+**資料源**（兩者皆免 token）：
+- `TaiwanStockPrice` —— 未還原 OHLC
+- `TaiwanStockDividendResult` —— **官方 `reference_price` + `before_price`**
+
+原先判斷無解是因為**測錯 dataset 名稱**（測了 `TaiwanStockCapitalReductionReferencePrice`，
+那個才是不存在的）。完整驗證見 `docs/review/data-source-verification.md` §測試 16–19。
+
+⚠️ **不要用 Google 搜到的公式** `(前收 − 現金股利) / 前收`：
+只對純現金股利有效，遇股票股利會錯（2317 2016 差 7.59 元），
+且換算配股率需要股面額，免費資料不含。
+
+⚠️ 股價資料起於 2015-01-05，該日之前的事件無法還原（2 年／5 年區間不受影響）。
+
+### 三個靜默錯誤陷阱（已記入實測記錄）
 
 1. 損益表 `EquityAttributableToOwnersOfParent` 是「**淨利**歸屬母公司」，**不是權益**
-2. BalanceSheet 有 `_per` 後綴變體（`CapitalStock` 與 `CapitalStock_per` 中文同名），需確認否則重複計數
+2. `origin_name` 中文名幾乎相同的一堆欄位（`NetIncome` vs `IncomeAfterTaxes`、
+   `CapitalStock` vs `CapitalStock_per`）→ **必須用英文 key 硬編碼對應**
+3. 「端點回 200」不代表「參數有效」（TPEx 日期參數永遠回當日）
 
 ### 資產／權益不在損益 dataset 內
 

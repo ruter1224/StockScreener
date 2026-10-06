@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>已還原股價問題｜Stock Screener</title>
+<title>已還原股價｜已解決｜Stock Screener</title>
 <style>
 :root{
   --bg:#0f1115; --card:#171a21; --line:#2a2f3a;
@@ -38,6 +38,8 @@ td.mono{font-family:"JetBrains Mono",Consolas,monospace;font-size:12px;color:#c8
   padding:12px 16px;margin:14px 0;border-radius:0 6px 6px 0;color:#cdd6e6}
 .danger{background:rgba(239,100,97,.07);border-left:3px solid var(--bad);
   padding:12px 16px;margin:14px 0;border-radius:0 6px 6px 0}
+.okbox{background:rgba(63,185,80,.08);border-left:3px solid var(--ok);
+  padding:12px 16px;margin:14px 0;border-radius:0 6px 6px 0}
 ul,ol{margin:8px 0;padding-left:24px}
 li{margin:5px 0}
 pre{background:#11141a;border:1px solid var(--line);border-radius:7px;padding:13px 15px;
@@ -56,6 +58,7 @@ pre{background:#11141a;border:1px solid var(--line);border-radius:7px;padding:13
 .arrow{color:var(--dim)}
 .x{color:var(--bad);font-weight:700}
 .v{color:var(--ok);font-weight:700}
+.ok{color:var(--ok);font-weight:700}
 footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
   color:var(--dim);font-size:12.5px}
 </style>
@@ -63,13 +66,22 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
 <body>
 <div class="wrap">
 
-<h1>🔴 唯一還卡住的問題：已還原股價</h1>
+<h1>✅ 已解決：已還原股價</h1>
 <div class="sub">Stock Screener ｜ 2026-10-06 ｜ 資料來源驗證完成後的結論</div>
 
+<div class="okbox">
+<b>結論先講：這個問題有免費解法，不用花錢、不用改網路、不用改設計。</b><br><br>
+FinMind 有個我先前<b>測錯名字</b>的免費 dataset：<code>TaiwanStockDividendResult</code>，
+它直接提供<b>官方除權息參考價</b>。用它算還原因子，10 檔 151 筆全部驗證通過。
+</div>
+
 <div class="note">
-<b>先講結論：</b>其他 14 項資料來源問題全部解決了（財務 11 年、日線 11.7 年、欄位對齊都確認了）。
-現在只剩<b>這一個</b>問題需要你決定：長區間報酬率要不要用<b>還原後的股價</b>。
-三條免費路徑已全部實測走不通，這是<b>資料來源的限制</b>，不是程式問題。
+<b>過程比結論重要</b>：我先前判定「三條免費路全斷，唯一阻塞」是<b>錯的</b>，
+錯在兩件事：<br>
+① <b>測錯 dataset 名稱</b> —— 我測的 <code>TaiwanStockCapitalReductionReferencePrice</code>
+根本不存在，卻誤以為官方沒有基準價資料。<br>
+② <b>用錯方法驗證公式</b> —— 拿除息日收盤去比參考價，把當天的真實漲跌當成公式誤差。<br><br>
+下面把正確做法與驗證結果攤開。
 </div>
 
 <h2>1. 為什麼需要「還原股價」？</h2>
@@ -95,89 +107,114 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
 <tr><th>用途</th><th>需要還原價嗎</th><th>影響程度</th></tr>
 <tr><td>昨天買、今天賣（幾天）</td><td class="v">不需要</td><td>影響極小</td></tr>
 <tr><td>季營收觀察（幾個月）</td><td>不太需要</td><td>影響小</td></tr>
-<tr><td><b>1～10 年報酬率</b></td><td class="x">必須要</td><td><b>不做就是錯的數字</b></td></tr>
-<tr><td>股價通道（歷史高低點）</td><td class="x">必須要</td><td><b>除權息日會出現假跳空</b></td></tr>
+<tr><td><b>1～10 年報酬率</b></td><td class="ok">✅ 已有解法</td><td>不做就是錯的數字</td></tr>
+<tr><td>股價通道（歷史高低點）</td><td class="ok">✅ 已有解法</td><td>除權息日會出現假跳空</td></tr>
 </table>
 
-<h2>2. 實測結果：三條免費路都斷了</h2>
+<h2>2. 免費解法：用官方參考價算因子</h2>
 
-<p class="big">我逐一呼叫 API 驗證，不是查文件。以下都是實際回應。</p>
+<p class="big">正確的還原因子公式只有一行：</p>
+
+<div class="card" style="text-align:center;padding:22px 16px">
+<div class="mono" style="font-size:17px;color:var(--ok)">
+factor = <span style="color:var(--warn)">reference_price</span> ÷ <span style="color:var(--accent)">before_price</span>
+</div>
+<p style="margin:14px 0 0;font-size:14px;color:var(--dim)">
+再把<b>除權息日（含）之前</b>的所有歷史價乘上這個因子，就得到還原後的價格。
+</p>
+</div>
 
 <table>
-<tr><th>嘗試的路</th><th>狀態</th><th>實際發生什麼事</th></tr>
-<tr>
-  <td><b>FinMind 已還原價</b><br><code>TaiwanStockPriceAdj</code></td>
-  <td><span class="tag t-bad">❌ 需付費</span></td>
-  <td class="mono">HTTP 400<br>"Your level is free. Please update your user level."</td>
-</tr>
-<tr>
-  <td><b>Yahoo / yfinance</b><br><code>Adj Close</code></td>
-  <td><span class="tag t-bad">❌ 網路被擋</span></td>
-  <td class="mono">Cookie/crumb fetch failed (Timeout)<br>query1.finance.yahoo.com:443 → 不通<br>但 openapi.twse.com.tw:443 → 通</td>
-</tr>
-<tr>
-  <td><b>自己用除權息還原</b><br><code>TWSE TWT48U</code></td>
-  <td><span class="tag t-bad">❌ 官方無資料</span></td>
-  <td class="mono">回 62 筆，但忽略 stockNo 參數<br>（傳 2330 還是回全市場）<br>而且是「待公告預告表」不是歷史</td>
-</tr>
+<tr><th>欄位</th><th>來自哪個 dataset</th><th>意義</th></tr>
+<tr><td class="mono">reference_price</td><td rowspan="2"><code>TaiwanStockDividendResult</code></td>
+    <td><b>官方除權息參考價</b>，已含現金股利、股票股利、增資等<b>所有</b>調整</td></tr>
+<tr><td class="mono">before_price</td><td>除權息前一交易日收盤價</td></tr>
+<tr><td class="mono">stock_or_cache_dividend</td><td>權息類型：<code>息</code>／<code>權</code>／<code>權息</code></td></tr>
+<tr><td class="mono">close, open, high, low</td><td><code>TaiwanStockPrice</code></td><td>未還原的原始 OHLC</td></tr>
 </table>
 
+<div class="okbox">
+<b>為什麼用官方參考價比自己算？</b>因為官方參考價已經把所有調整都算進去了，
+你不需要知道當天是配現金還是配股票，也<b>不需要股面額</b>來換算配股率。
+</div>
+
+<h2>3. 實測驗證（全部是實際 API 呼叫）</h2>
+
+<div class="card">
+<p><b>驗證 3.1　<code>before_price</code> 可靠嗎？</b></p>
+<p style="margin-bottom:0">10 檔共 151 筆，與 <code>TaiwanStockPrice</code> 的前一日收盤價比對：
+<b>一致率 151／151，完全吻合</b>。→ 不需要另外 join 取前收。</p>
+</div>
+
+<div class="card">
+<p><b>驗證 3.2　官方因子 vs 網路上常見的公式，哪個準？</b></p>
+<p>判準：把因子套上去後，<b>除權息日的跳空應該跟一般交易日一樣</b>（因為那就是當天的真實漲跌）。</p>
+<table style="margin-bottom:0">
+<tr><th>代號</th><th>筆數</th><th>官方因子偏差</th><th>自算公式偏差</th></tr>
+<tr><td>2330 台積電</td><td>34</td><td class="ok">+0.194%</td><td class="ok">+0.194%</td></tr>
+<tr><td>2317 鴻海</td><td>12</td><td class="ok">+0.373%</td><td class="x">−0.803%</td></tr>
+<tr><td>2454 聯發科</td><td>15</td><td class="ok">−0.718%</td><td class="x">−1.319%</td></tr>
+<tr><td>2881 富邦金</td><td>17</td><td class="ok">−0.244%</td><td class="x">−1.763%</td></tr>
+<tr><td>2376 技嘉</td><td>11</td><td class="ok">−1.314%</td><td class="x">−1.625%</td></tr>
+<tr><td colspan="2"><b>平均絕對偏差</b></td><td class="ok"><b>0.750%</b></td><td class="x"><b>0.951%</b></td></tr>
+</table>
+<p style="margin:12px 0 0;font-size:13px;color:var(--dim)">
+（完整 10 檔見 <code>data-source-verification.md</code> 測試 19.2。殘餘的 0.7% 不是誤差，是當天真實漲跌。）
+</p>
+</div>
+
+<div class="card">
+<p><b>驗證 3.3　涵蓋夠嗎？會不會漏？</b></p>
+<table style="margin-bottom:0">
+<tr><th>項目</th><th>結果</th></tr>
+<tr><td>免 token？</td><td class="ok">✅ 10 檔 151 筆全部 HTTP 200</td></tr>
+<tr><td>期間</td><td>2015-06 ～ 2026-09（與日線資料起點 2015-01 相容）</td></tr>
+<tr><td>會漏事件嗎？</td><td class="ok">✅ 「只有股利資料、沒有參考價」的筆數 = <b>0</b>（是超集）</td></tr>
+<tr><td>反而多出來的？</td><td>富邦金多 5 筆、其餘各多 1 筆 → 證明它<b>比股利表更完整</b></td></tr>
+</table>
+</div>
+
+<h2>4. ⚠️ 不要用 Google 搜到的公式</h2>
+
 <div class="danger">
-<b>為什麼第三條也不行？</b><br>
-還原價公式需要「<b>除權息基準價</b>」：<code>還原後價 = 收盤價 − 每股現金股利</code>。<br>
-我找到 FinMind 的 <code>TaiwanStockDividend</code>，它確實有「每股股利 7.0 元」和「除息日 2026-09-16」，
-<b>但沒有基準價這個欄位</b>。而官方唯一相關的 <code>TaiwanStockCapitalReductionReferencePrice</code>
-（減資參考價）<b>實測回空資料</b>。<br><br>
-順帶一提，那份股利資料 <b>2015～2018 每年只有 1 筆</b>，就算有基準價也不完整。
+搜尋常見的寫法是<br>
+<span class="mono">factor = (除權息前一日收盤 − 每股現金股利) ÷ 前一日收盤</span><br><br>
+<b>這只對「純配現金」有效。</b>遇到<b>股票股利</b>就會錯，因為還要除以 <code>(1 + 配股率)</code>：<br><br>
+<table style="margin:10px 0">
+<tr><th>案例</th><th>官方參考價</th><th>自算公式值</th><th>錯多少</th></tr>
+<tr><td>2317 鴻海 2016-09-02<br><span style="font-size:12px;color:var(--dim)">現金 4.0 + 股票股利 1.0</span></td>
+    <td class="ok">75.81</td><td class="x">83.40</td><td class="x"><b>+7.59 元</b></td></tr>
+<tr><td>2317 鴻海 2015-09-03<br><span style="font-size:12px;color:var(--dim)">現金 3.8 + 股票股利 0.5</span></td>
+    <td class="ok">82.66</td><td class="x">86.80</td><td class="x"><b>+4.14 元</b></td></tr>
+</table>
+而且要換算配股率得知道<b>股面額</b>，免費資料集<b>不含股面額</b>
+（<code>TaiwanStockInfo</code> 只有名稱與產業別）。<br><br>
+<b>結論</b>：台股每年除權息事件中，股票股利並非罕見（抽樣 10 檔就有 6 筆股票股利、12 筆現金增資）。
+官方參考價是唯一能正確處理全部三種權息類型的來源。
 </div>
 
-<h2>3. 那怎麼辦？三個選項</h2>
+<h2>5. 我收回的兩個錯誤結論</h2>
 
-<div class="choice">
-<h3><span class="pill">選項 A</span>買 FinMind Backer</h3>
-<p>一次付費，同時解鎖 <code>TaiwanStockPriceAdj</code>、<code>MonthPrice</code>、<code>WeekPrice</code>、<code>PriceLimit</code>。
-所有功能都能做，程式不用改。</p>
-<p style="color:var(--dim);margin-bottom:0"><b>代價</b>：要花錢，且資料依賴單一付費來源。</p>
-</div>
-
-<div class="choice c2">
-<h3><span class="pill">選項 B</span>換網路環境，用 Yahoo</h3>
-<p>目前是<b>這台電腦</b>的網路被 Yahoo 擋住（DNS 解析到 180.222.109.251，但 TCP 連不上）。
-換網路或掛 VPN／proxy 就可能通。Yahoo 的 Adj Close 是免費的。</p>
-<p style="color:var(--dim);margin-bottom:0"><b>代價</b>：要動網路設定；且 Yahoo 是境外站台，不確定長期穩定。
-<b>我無法驗證這條路是否真的可行</b>——需要在有網路的環境實測。</p>
+<div class="choice c3">
+<h3><span class="pill">誤判 1</span>「股利資料 2015～2018 每年只有 1 筆，明顯缺漏」</h3>
+<p style="margin-bottom:0"><b>錯。</b>台積電 <b>2019 年才開始季度配息</b>，
+之前是年度配息（每年 6 月除息一次）。所以早期每年 1 筆<b>就是正確的</b>。
+我當時只看到數量少就歸因資料品質，沒有去查配息政策的變化。
+</p>
 </div>
 
 <div class="choice c3">
-<h3><span class="pill">選項 C</span>改設計，不用報酬率類指標 <span class="tag t-warn">我建議這個</span></h3>
-<p>篩選區間只用「<b>財務體質類</b>」指標：ROE、毛利率、負債比、營收成長率、連續幾年賺錢。
-<b>這些完全不需要股價，自然就不需要還原價。</b></p>
-<p>你的核心目標是「<b>找便宜</b>」，便宜可以用 <code>PE 分位</code> 判斷——
-PE 分位基於<b>獲利與股價</b>，同樣受影響。但可以用「<b>當下 PE vs 歷史 PE 分位</b>」
-搭配財務體質來替代純報酬率。</p>
-<p style="margin-bottom:0"><b>連帶影響</b>：
-<ul style="margin-bottom:0">
-<li>❌ 長區間報酬率指標不能用（1 年、3 年、5 年報酬率）</li>
-<li>❌ 股價通道（歷史高低价位）不能畫</li>
-<li>⚠️ 追價安全圈的「天花板上移」判斷要改用 PE 分位</li>
-<li>✅ <b>財務體質、杜邦分析、營收 CAGR、安全邊際（5 年願景）全部照做</b></li>
-</ul></p>
+<h3><span class="pill">誤判 2</span>「自建還原已確認不可行，唯一阻塞」</h3>
+<p style="margin-bottom:0"><b>錯在測錯 dataset 名稱。</b>
+我測的是 <code>TaiwanStockCapitalReductionReferencePrice</code>（減資參考價），
+那個名字回空資料，我就推論「官方沒有基準價」。
+但真正的 dataset 叫 <code>TaiwanStockDividendResult</code>，資料一直都在。<br>
+<b>教訓</b>：名字相近的 dataset 回空，不代表該功能不存在——應該先把官方 dataset 清單
+完整列出來逐一比對（測試 9 已經能列出全部 105 個，我當時沒用它交叉比對）。
+</p>
 </div>
 
-<h2>4. 我的建議</h2>
-
-<div class="card">
-<p><b>選 C（改設計）。</b>理由：</p>
-<ol>
-<li>你最初的核心目標是<b>找便宜</b>、看<b>財務體質</b>——這些本來就不依賴報酬率</li>
-<li>A 和 B 都是為了讓一類你可能用得不多、但技術上最難的指標勉強能用</li>
-<li>放棄報酬率類指標<b>不用付錢、不用改網路、不用擔心資料源掛掉</b></li>
-</ol>
-<p style="margin-bottom:0"><b>但這是你的取捨，我不替你決定。</b>如果你確實想要看「這檔股票 5 年賺了幾 %」，
-那就得走 A 或 B。</p>
-</div>
-
-<h2>5. 目前狀態</h2>
+<h2>6. 目前狀態</h2>
 
 <table>
 <tr><th>項目</th><th>狀態</th></tr>
@@ -186,11 +223,21 @@ PE 分位基於<b>獲利與股價</b>，同樣受影響。但可以用「<b>當�
 <tr><td>日線（11.7 年 OHLC）</td><td><span class="tag t-ok">✅ 完成</span> 全市場約 3～4 小時抓完</td></tr>
 <tr><td>交易日曆</td><td><span class="tag t-ok">✅ 完成</span> 官方提供 6,936 筆</td></tr>
 <tr><td>欄位對應與靜默錯誤</td><td><span class="tag t-ok">✅ 完成</span> 3 項全部驗證</td></tr>
-<tr><td><b>已還原股價</b></td><td><span class="tag t-bad">🔴 需你決定</span></td></tr>
+<tr><td><b>已還原股價</b></td><td><span class="tag t-ok">✅ 完成</span> 免費官方參考價，151 筆驗證通過</td></tr>
 </table>
 
+<div class="okbox" style="margin-top:16px">
+<b>資料來源問題全部結清，零阻塞。</b>不需要買 Backer、不需要換網路、不需要犧牲任何指標。<br>
+長區間報酬率、股價通道、追價安全圈 —— <b>全部照原設計做</b>。
+</div>
+
+<div class="note" style="margin-top:16px">
+<b>唯一殘餘限制</b>：日線資料起於 2015-01-05，該日之前的除權息事件無法還原。
+實務上 2 年與 5 年的計算區間都落在 2015 年之後，<b>不影響</b>。
+</div>
+
 <footer>
-完整實測記錄：<code>docs/review/data-source-verification.md</code>（514 行，15 項測試）<br>
+完整實測記錄：<code>docs/review/data-source-verification.md</code>（測試 16–19）<br>
 決策紀錄：<code>docs/superpowers/specs/2026-10-05-decision-log.md</code><br><br>
 本頁所有數字都來自實際 API 呼叫，非文件查閱。
 </footer>

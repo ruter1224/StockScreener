@@ -139,14 +139,63 @@ uv run python fetch.py --dataset TaiwanStockBalanceSheet --max-seconds 3600
 4. `TaiwanStockInfo` 是**變更事件流**（4,329 列／300+ 個 date／32 列 date=null），需 upsert
 5. `origin_name` 中文名大量重複，**必須用英文 key 硬編碼對應**
 
+## ⚠️ 本次踩的坑（2026-10-06 下午）
+
+### 1. 用「4 碼數字」判斷普通股是錯的
+
+0050／0051／0056／00411A／00679B 全是 4 碼（或含字母）卻都是 ETF，
+抓財務資料全部回 `rows=0`，白跑額度。
+
+**正確判斷**：`industry_category` 內容 + 代號是否帶字母後綴。
+程式已實作（`fetch.py` 的 `build_universe`）。
+
+### 2. `UnicodeEncodeError` 中斷長時間抓取
+
+log 用 emoji（`⏱`／`🔴`／`⚠`），Windows 主控台 cp950 不支援，
+跑到一半直接崩潰。**這條教訓 `data-source-verification.md` 早就記過，本次重犯。**
+
+已修：`log()` 過濾符號。
+
+### 3. 刪 `.venv` 用錯方法
+
+用 `Remove-Item -Recurse` 刪 Python 虛擬環境，會留下半殘目錄，
+之後 `uv sync` 報「not a valid Python environment」且**無法自我修復**。
+
+**正確做法**：`uv venv --clear`。
+
+### 4. `.python-version` 不能用 `Set-Content` 寫
+
+PowerShell 的 `Set-Content -Encoding UTF8` 會加 BOM，`uv` 讀不了。
+改用 `[System.IO.File]::WriteAllText($p, "3.12", (New-Object System.Text.UTF8Encoding($false)))`。
+
+### 5. dataset 錯誤分類有五種不是四種
+
+**同一個 dataset 帶不同參數會得到不同錯誤**：
+- 帶 `data_id` → 免費層可用
+- 不帶 `data_id`（全域查詢）→ `400 Your level is register`（需付費）
+
+我因此連續誤判三次。分類邏輯已寫在 `classify()`，測試涵蓋 11 種組合。
+
+### 6. 官方文件本身有 5 個錯誤
+
+`TaiwanstockGovernmentBankBuySell`（小寫 s）照抄會 422；
+另有 4 個 dataset 文件列出但服務端沒有。
+
+→ **判定 dataset 可用性要以 API enum 為基準**，方法見
+`data-source-verification.md` 測試 25.7。
+
 ## ⚠️ 本機 Chezmoi 待處理
 
-`chezmoi status` 已於 2026-10-06 確認乾淨，無待處理變動。
+`chezmoi status` 與 `chezmoi git -- status` 均於 2026-10-06 確認乾淨，本次無變動。
 
 ## 🕐 最後更新
 
-- 時間：2026-10-06（第五次更新）
+- 時間：2026-10-06（收工）
 - 更新者：OpenCode @ LAP2021-T153
-- HEAD：`44b8413`（建立抓取程式）
-- Git 狀態：**工作區乾淨，已與 `origin/master` 同步**
-- 驗證：35 個單元測試通過、ruff 全過、端到端實測（台泥單季營收 331.7/381.2 億元證明單季值判斷正確）
+- HEAD：`8f7b092`（更新 handoff 與規格書：記錄抓取程式完成狀態）
+- Git push：✅ 已推（local == origin/master）
+- Chezmoi push：—（無變動）
+- 目標驗證：✅ 35 個單元測試通過（`uv run python -m unittest discover tests`）
+- 目標驗證：✅ ruff 全過（`uv run ruff check src fetch.py tests`）
+- 目標驗證：✅ 端到端可跑（`--global-only` 5 dataset 成功、
+  `--dataset TaiwanStockFinancialStatements --limit 6` 成功、`--status` 正確）

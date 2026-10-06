@@ -692,6 +692,11 @@ date=20260101 (元旦) → stat="很抱歉，沒有符合條件的資料!", tabl
 
 → **判定 dataset 可用性前，先對照官方總覽確認名稱存在，再判斷是權限問題還是參數問題。**
 
+> ⚠️ **本節後續又修正一次（測試 26.4）**：`TaiwanStockCapitalReductionReferencePrice`
+> 帶 token 後回 `200 success`，實際是**需登入**而非需付費。
+> 但連有面額變更事件的長科 6548 都回空資料，**對本專案無用**。
+> 失敗分類需補第四種「需登入（帶 token 即解鎖）」。
+
 ### 24.2 官方文件確認的 API 行為
 
 #### 額度查詢端點
@@ -905,6 +910,129 @@ TaiwanStockGovernmentBankBuySell           TaiwanFutOptInstitutionalInvestors
 | `400 "Your level is free"` | dataset 存在但**需付費** | 記錄，評估是否買 |
 | `400 "parameter data_id don't provide"` | **用法錯誤**（全域型別帶了 data_id）| 去掉 data_id |
 | `200` + `rows: 0` | 名稱與用法都對，但**期間無資料** | 調整日期範圍 |
+
+---
+
+## 測試 26：實際額度查證（取得 token 後）
+
+### 26.1 額度確認：`/v2/user_info` 帶 Authorization header
+
+```python
+headers = {"Authorization": f"Bearer {token}"}
+GET https://api.web.finmindtrade.com/v2/user_info
+→ HTTP 200, status=success
+```
+
+實際回應：
+
+| 欄位 | 值 | 意義 |
+|---|---|---|
+| `level` | 1 | Free 層級 |
+| `level_title` | `Free` | 同上 |
+| `api_request_limit` | **600** | 總額度 |
+| `api_request_limit_hour` | **600** | 每小時額度 |
+| `api_request_limit_day` | `-` | 無每日限制欄位 |
+| `user_count` | 0 | 尚未使用 |
+| `email_verify` | True | 已驗證 |
+| `end_date` | （空）| **無到期日 → 7 天期限的說法待確認** |
+
+`BackerInfo` / `SponsorInfo` / `SponsorProInfo` 三個欄位結構相同，
+未訂閱者 `api_request_limit: 0`。
+
+⚠️ **舊 spec §4.3 的 pre-flight 機制是可用的**（先前誤判為不可靠，
+原因是我測試時沒帶 Authorization header）。
+
+### 26.2 ⚠️ 關鍵發現：token 對取資料完全非必要
+
+| dataset | 帶 token | 不帶 token | 結論 |
+|---|---|---|---|
+| `TaiwanStockPrice` | 200, rows=24 | 200, rows=24 | **完全相同** |
+| `TaiwanStockPER` | 200, rows=23 | 200, rows=23 | **完全相同** |
+
+→ **token 唯一用途是查詢額度。**
+
+**影響**：舊 spec §4「Token 機制」整節（7 天過期倒數、換 token 流程、
+pre-flight 防護、`.env` token_store 模組）**對抓取流程是多余的**。
+`core/token_store.py` 模組在 v1 可省略或簡化為只保留讀取額度用的最小實作。
+
+⚠️ 但 `end_date` 為空這點**無法證實或推翻 7 天期限的說法**
+（那需要等到 7 天後再看）。抓取流程不應依賴 token 有效性，
+而實測顯示確實可以不依賴。
+
+### 26.3 ⚠️ 付費限制的錯誤訊息帶 token 後會變
+
+| 情況 | 訊息 |
+|---|---|
+| 不帶 token | `Your level is **free**. Please update your user level.` |
+| 帶 token | `Your level is **register**. Please update your user level.` |
+
+→ 服務端對「未登入」與「已登入未付費」有不同描述。
+判斷可用性時**不能只看 HTTP code，必須看 `msg` 內容**。
+
+### 26.4 再次修正：`TaiwanStockCapitalReductionReferencePrice` 不是需付費
+
+昨天（測試 24）記為「需 Backer 付費」，**再次修正**：
+
+| 條件 | 結果 |
+|---|---|
+| 不帶 token | `400 Your level is free` |
+| **帶 token** | **`200 success`**（rows=0）|
+
+→ 它是**需登入，不是需付費**。
+
+⚠️ **但實測確認它對本專案沒用**：
+```
+data_id=2330  start=2020  → 200 rows=0
+data_id=2330  start=2000  → 200 rows=0
+data_id=6548  start=2019  → 200 rows=0   ← 長科有面額變更記錄
+```
+
+連**確實有面額變更事件的長科 6548 都回空**。
+且全域型呼叫（不帶 `data_id`）會回 `start_date parameter is missing.`。
+
+→ 該 dataset 可能是**文件列出但無實際資料**，或需不同參數。
+**不列入本專案使用範圍。**
+
+### 26.5 ✅ 真正可用的免費還原資料源（不需 token）
+
+| dataset | 狀態 | 筆數 | 欄位 |
+|---|---|---|---|
+| **`TaiwanStockParValueChange`** | ✅ **免 token 可用** | 16（全域）| `before_close` / `after_ref_close` / `after_ref_open` / `after_ref_max` / `after_ref_min` / `stock_name` |
+| **`TaiwanStockSplitPrice`** | ✅ **免 token 可用** | 35（全域）| `type`（含「面額變更」）/ `before_price` / `after_price` / `open_price` / `max_price` / `min_price` |
+
+樣本（長科 6548，2019-09-09 面額變更）：
+```
+before_close = 312.0  →  after_ref_close = 31.2     （1/10）
+```
+
+⚠️ **這兩個可同時取得，且比 `CapitalReductionReferencePrice` 完整**
+（後者回空）。還原面額變更應使用這兩個。
+
+### 26.6 其他確認
+
+`TaiwanStockDelisting` 不需 token 即可取得，且帶 token 時筆數從 231 → **690**
+（全域不帶日期 vs 帶 `start_date=2015-01-01` 的差異）。
+⚠️ **全域型 dataset 的筆數會受 `start_date` 影響，不可省略參數後直接比較。**
+
+### 26.7 抓取規劃（現在有數字了）
+
+```
+額度           600 次/小時（官方 user_info 確認）
+實測無節流速率  5 requests/秒 = 18,000 次/小時（遠超額度）
+→ 實際瓶頸是額度 600/小時，不是網路速度
+```
+
+規劃：
+```
+12,000 requests ÷ 600/hour = 20 小時（若照舊 spec 每 7.2 秒一次）
+2000 檔 × 6 dataset = 12,000 requests
+```
+
+⚠️ **20 小時仍偏長。** 優化方向（階段 1 實作時決定）：
+- 免費層可用且資料量大的 dataset 優先（如 `TaiwanStockTradingDate` 免 `data_id`）
+- 分散抓取：不必一次抓完，可每日排程增量補
+- 實測是否可提高速率（舊 spec 的 7.2 秒間隔是照 500/小時推算，
+  實際額度 600，可放寬到 6 秒/次 = 600/小時）
 
 ---
 
@@ -1287,7 +1415,7 @@ uv pip install --python "$env:TEMP\opencode\dataprobe\Scripts\python.exe" yfinan
   才改季度配息，早期每年 1 筆是正確的（測試 18）
 - 曾稱自建還原「三條免費路全斷，唯一阻塞」→ **該 dataset 並非不存在，而是需付費**，
   `TaiwanStockCapitalReductionReferencePrice` 名稱正確、官方總覽有列，
-  真正原因是需 Backer（免費層級回 `400 "Your level is free"`），正確來源是
+  真正原因是**需登入**（帶 token 即回 200，但資料為空），正確來源是
   **`TaiwanStockDividendResult`**（測試 19）
 
 ### 更正軌跡

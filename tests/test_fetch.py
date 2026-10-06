@@ -10,6 +10,8 @@
 - 股票池的 ETF 判斷
 """
 
+import contextlib
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -472,6 +474,47 @@ class TestExitCodes(unittest.TestCase):
         """抓完但有失敗檔 → 回 6，讓 run_all 補抓而不是當成功。"""
         code = self._run([FetchError.SERVER_ERROR], ["1"])
         self.assertEqual(code, fetch.EXIT_PARTIAL)
+
+    def test_progress_logged_while_stocks_succeed(self):
+        """全部成功時，抓取途中也必須輸出進度。
+
+        ⚠️ 2026-10-06 回歸：進度 log 放在迴圈末端，而成功路徑有 `continue`，
+        結果整段被跳過 —— log 停滯 3 小時沒有任何進度輸出。
+        資料本身沒錯，但掛機時無法判斷有沒有卡住。
+        這個測試就是為了擋住這種「看起來沒錯但沒在講話」的回歸。
+        """
+        pool = [str(n) for n in range(60)]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = fetch.fetch_per_stock(
+                _ScriptedClient([]), self.writer, self.state, "DS_X", pool,
+                None, False, None,
+            )
+        out = buf.getvalue()
+        self.assertEqual(code, fetch.EXIT_OK)
+        self.assertIn("25/60", out)
+        self.assertIn("50/60", out)
+        self.assertIn("檔/秒", out)
+
+    def test_progress_logged_on_failure_path(self):
+        """失敗路徑也要有進度，不能只有成功時才有。"""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            fetch.fetch_per_stock(
+                _ScriptedClient([]), self.writer, self.state, "DS_Y",
+                [str(n) for n in range(30)], None, False, None,
+            )
+        self.assertIn("25/30", buf.getvalue())
+
+    def test_last_stock_always_logs_progress(self):
+        """最後一檔不是 25 的倍數時也要輸出，避免尾段沒有進度。"""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            fetch.fetch_per_stock(
+                _ScriptedClient([]), self.writer, self.state, "DS_Z",
+                [str(n) for n in range(7)], None, False, None,
+            )
+        self.assertIn("7/7", buf.getvalue())
 
 
 if __name__ == "__main__":

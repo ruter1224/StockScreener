@@ -307,6 +307,20 @@ def fetch_per_stock(
     consecutive_transient = 0
     t0 = time.time()
 
+    def log_progress(done: int) -> None:
+        """每 25 檔輸出一次進度。成功路徑與失敗路徑都必須呼叫。
+
+        ⚠️ 2026-10-06 踩過：進度 log 原本放在迴圈末端，成功時 `continue`
+        會整段跳過，結果 log 停滯 3 小時都沒進度（資料本身沒錯，
+        但掛機時無法判斷是否卡住）。改成抽成函式兩邊都呼叫。
+        """
+        if done and (done % 25 == 0 or done == len(targets)):
+            elapsed = time.time() - t0
+            rate = done / elapsed if elapsed else 0
+            eta = (len(targets) - done) / rate / 3600 if rate else 0
+            log(f"  {done}/{len(targets)}  ok={stats['ok']} empty={stats['empty']} "
+                f"err={stats['error']}  {rate:.2f} 檔/秒  ETA {eta:.1f}h")
+
     for i, sid in enumerate(targets, 1):
         # 時間上限：到點就正常結束，資料已落盤，rerun 可續
         if max_seconds is not None and (time.time() - t0) > max_seconds:
@@ -350,6 +364,7 @@ def fetch_per_stock(
                 writer.write(dataset, sid, r.data)
                 state.record(dataset, sid, "ok", rows=r.rows, last_date=last_date)
                 stats["ok"] += 1
+            log_progress(i)
             continue
 
         # 其餘錯誤：記錄後繼續（4xx 由熔斷器把關，連續 3 次會拋 CircuitOpen）
@@ -367,12 +382,7 @@ def fetch_per_stock(
                 )
                 return EXIT_NETWORK
 
-        if i % 25 == 0 or i == len(targets):
-            elapsed = time.time() - t0
-            rate = i / elapsed if elapsed else 0
-            eta = (len(targets) - i) / rate / 3600 if rate else 0
-            log(f"  {i}/{len(targets)}  ok={stats['ok']} empty={stats['empty']} "
-                f"err={stats['error']}  {rate:.2f} 檔/秒  ETA {eta:.1f}h")
+        log_progress(i)
 
     state.finish_run(run_id, len(targets))
     log(f"完成：ok={stats['ok']} empty={stats['empty']} error={stats['error']}")

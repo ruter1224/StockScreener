@@ -21,6 +21,9 @@ data/
 *.duckdb.wal
 *.parquet
 
+# 抓取 log（本機產物，會持續增長）
+logs/
+
 # ===== 本機工具 =====
 .DS_Store
 Thumbs.db

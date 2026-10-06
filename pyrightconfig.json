@@ -1,0 +1,20 @@
+{
+  "typeCheckingMode": "basic",
+  "extraPaths": ["src", "."],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.git",
+    "**/.venv",
+    "**/venv",
+    "**/.mypy_cache",
+    "**/.pytest_cache",
+    "**/.ruff_cache",
+    "**/.playwright-mcp",
+    "**/_shots",
+    "**/egg-info",
+    "**/.eggs",
+    "data",
+    "OLD"
+  ]
+}

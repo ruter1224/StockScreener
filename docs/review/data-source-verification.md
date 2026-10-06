@@ -284,9 +284,11 @@ GET /api/v4/data?dataset=TaiwanStockDividend&data_id=2330&start_date=2015-01-01
 
 還原價公式需要：`除權息後參考價 = 收盤價 − 現金股利`。
 `CashExDividendTradingDate` 有，但**該日的參考價欄位不存在**。
-
-FinMind 免費清單裡唯一相關的 `TaiwanStockCapitalReductionReferencePrice`
-（減資參考價）**實測回空資料**（測試 9 表）。
+- FinMind 免費清單裡唯一相關的 `TaiwanStockCapitalReductionReferencePrice`
+  （減資參考價）**實測回空資料**（測試 9 表）。
+  > 📌 **修正（2026-10-06）**：此處原推論它「**不存在**」。讀官方文件後確認
+  > 該 dataset **名稱正確、明確列在官方總覽中**，真正原因是**需 Backer 付費**
+  > （免費層級回 `400 "Your level is free"`）。詳見測試 24.1
 
 → **自建精確還原價不可行。**
 
@@ -670,6 +672,148 @@ date=20260101 (元旦) → stat="很抱歉，沒有符合條件的資料!", tabl
 
 ---
 
+## 測試 24：官方文件查證 + 未測 dataset 探測（2026-10-06）
+
+### 24.1 ⚠️ 重大教訓：不可憑回空就宣布 dataset 不存在
+
+先前測試 22 用「猜 dataset 名稱 + 打 API」的方式判定可用性，宣布
+`TaiwanStockCapitalReductionReferencePrice` 等「不存在」。
+
+**讀官方文件後發現該 dataset 明確列在官方總覽中。**
+真正失敗原因不是「名稱猜錯」，而是**回空資料就宣布不存在，沒查官方列表**。
+
+⚠️ **三種失敗性質完全不同，不可混為一談：**
+
+| API 回應 | 意義 | 實測案例 |
+|---|---|---|
+| `422` enum 錯誤 | **dataset 真的不存在** | `TaiwanStockConsensus`、`TaiwanStockEstimate`、`TaiwanStockTargetPrice` |
+| `400` "Your level is free" | **dataset 存在，但需 Backer 付費** | `TaiwanStockCapitalReductionReferencePrice`、`TaiwanStockMarketValue`、`TaiwanStockIndustryChainMoneyFlow` |
+| `200` 但 `rows: 0` | **參數不對，或該期間無資料** | `TaiwanStockSplitPrice` 帶 `data_id` 時 |
+
+→ **判定 dataset 可用性前，先對照官方總覽確認名稱存在，再判斷是權限問題還是參數問題。**
+
+### 24.2 官方文件確認的 API 行為
+
+#### 額度查詢端點
+
+**`GET https://api.web.finmindtrade.com/v2/user_info`** —— 端點**正確**，
+先前測到「請輸入 token」是因為**沒帶 `Authorization` header**，不是端點有問題。
+
+Headers：`Authorization: Bearer {token}`
+回應欄位：`user_count`（使用次數）、`api_request_limit`（使用上限）
+
+```python
+headers = {"Authorization": f"Bearer {token}"}
+url = "https://api.web.finmindtrade.com/v2/user_info"
+resp = requests.get(url, headers=headers)
+resp.json()["user_count"]         # 使用次數
+resp.json()["api_request_limit"]  # 使用上限
+```
+
+→ **拿到 token 後一次呼叫即可讀出實際額度**，這是確認免費層額度上限最乾脆的方式。
+
+#### 額度用完的回應
+
+```python
+resp.status_code   # 402
+resp.json()        # {'msg': 'Requests reach the upper limit. https://finmindtrade.com/', 'status': 402}
+```
+
+⚠️ `msg` 欄位後面**帶著 URL**。抓取器必須認得這個**具體訊息**，
+不能只判 HTTP code —— 因為其他 4xx 也有 402 以外的情況，處理方式不同
+（402 是「額度用完，等下個週期」，其他 4xx 是「請求有問題，不重試」）。
+
+#### 全域型 dataset 不可帶 `data_id`
+
+```json
+{'msg': "parameter data_id don't provide on X dataset", 'status': 400}
+```
+
+→ 與「需付費」的 `400 "Your level is free"` **訊息不同**，
+可據此判斷是「用法錯誤」而非「無權限」。
+
+⚠️ **官方文件本身有 casing 錯誤**：`TaiwanstockGovernmentBankBuySell`（`stock` 小寫）
+實際呼叫回 `422` enum 錯誤 → **不接受此寫法**。呼叫時必須照抄實際可用的名稱。
+
+### 24.3 官方 MCP Server 的定位
+
+官方說明：「由工具自動呼叫並**實際抓取資料**…**適合多輪、agentic 的查詢與分析**」，
+四個範例全為對話式探索（查走勢、多輪追問、跨資料集分析、條件篩選）。
+
+**本專案維持不採用 MCP 作為資料來源，但理由修正：**
+
+| 舊 spec 的排除理由 | 實測後的事實 |
+|---|---|
+| 「每次對話重打 API、額度消耗最快」 | ❌ **理由不成立** —— 免 token 實測 5 requests/秒 |
+| 「沒有批次排程、沒有本地快取」 | ✅ 仍成立 |
+| 「需要可批次、可增量、可重跑」 | ✅ 需求判斷仍成立 |
+
+→ **結論不變，理由改為**：MCP 沒有水位線與增量機制，
+與本專案的資料管線需求不匹配；且 MCP 需要 `FINMIND_TOKEN`，
+對長期掛機抓取是額外依賴（而我們實測免 token 即可）。
+
+**MCP 的正確定位：開發期資料探勘。** MCP 頁面內建的「資料欄位注意事項」
+（興櫃 `open` 為前日均價）可直接查到，不必靠舊 spec 轉述。
+
+### 24.4 新發現可用的 dataset（實測）
+
+| dataset | 狀態 | 內容 | 用途 |
+|---|---|---|---|
+| **`TaiwanStockMonthRevenue`** | ✅ 免 token | **141 筆，2015-01 ～ 2026-09**，欄位 `revenue` / `revenue_year` / `revenue_month` | **月營收**（比季度財報加總更直接）|
+| **`TaiwanStockParValueChange`** | ✅ 免 token | **16 筆全域**，2019-09-09 ～ 2025-08-25，欄位 `before_close` / `after_ref_close` / `after_ref_open` / `after_ref_max` / `after_ref_min` | **變更面額還原**，與 DividendResult 互補 |
+| `TaiwanStockSplitPrice` | ✅ 免 token | 35 筆全域，2019-09-09 ～ 2026-09-07，欄位 `type`（含「面額變更」）/ `before_price` / `after_price` | 股票分割／面額變更 |
+| **`TaiwanStockDelisting`** | ✅ 免 token | **231 筆全域** | **下市櫃表**，解決 §6 #7「官方外 1,164 檔性質細分」|
+| `TaiwanStockActiveETFInfo` | ✅ 免 token | 40 筆（僅當日）| 主動式 ETF 清單（股票辨識用）|
+
+#### ⚠️ `TaiwanStockMonthRevenue` 的日期語意陷阱
+
+第一筆樣本：`date=2015-01-01` 但 `revenue_year=2014`、`revenue_month=12`。
+
+→ `date` 是**資料庫寫入日**，不是會計期間。
+**計算營收 CAGR 必須用 `revenue_year` + `revenue_month`，不可直接用 `date`。**
+
+#### ⚠️ 還原股價的資料來源需要補完
+
+先前只用 `TaiwanStockDividendResult`（因子 = `reference_price / before_price`）處理**除權息**。
+`TaiwanStockParValueChange` 顯示**變更面額是另一種事件**
+（樣本長科 6548：前收 312 → 調整後 31.2，恰為 1/10）。
+
+→ **若只用 DividendResult，面額變更／分割的事件不會被還原，長區間報酬率會失真。**
+**還原因子需合併 `DividendResult` + `ParValueChange` + `SplitPrice` 三個來源。**
+
+#### `TaiwanStockDelisting` 解決了 §6 #7
+
+樣本包含「國泰RMB短期報酬」這類**下市的 ETF**，不只是股票。
+→ 官方外 1,164 檔中應包含下市的 ETF／指數型商品，不全是「應納入回測歷史」的普通股。
+
+### 24.5 實測確認需 Backer 付費的 dataset
+
+以下官方列表中存在，但免費層級回 `400 "Your level is free"`：
+
+```
+TaiwanStockCapitalReductionReferencePrice   TaiwanStockMarketValue
+TaiwanStockMarketValueWeight               TaiwanStockIndustryChain
+TaiwanStockIndustryChainMoneyFlow          TaiwanStockDispositionSecuritiesPeriod
+TaiwanStockHoldingSharesPer                TaiwanStock10Year
+TaiwanStockPriceLimit                      TaiwanBusinessIndicator
+TaiwanStockBrokerDailyConcentration        TaiwanStockMarginMaintenance
+```
+
+⚠️ 其中 **`TaiwanStockIndustryChainMoneyFlow`（台股產業鏈資金流向）**原本可能對
+五大維度的「產業鏈地位」有參考價值，但**免費拿不到**。
+若日後要量化該維度，需評估付費。
+
+### 24.6 官方總覽的其他觀察
+
+- 頁面宣稱 **93 種** dataset，各分類筆數加總為 **94**。
+  差額來源：`TaiwanStockTradingDailyReport` 因 query 參數不同（by 股票代碼／by 券商代碼）
+  被列成兩行，去重後正好 93。
+- 總覽頁只涵蓋**台灣市場**；另有美國／英國／歐洲／日本市場與宏觀指標分類，
+  但其 dataset 清單不在同一頁。
+- 該頁**不含**付費方案說明、schema、欄位定義。schema 需查各 dataset 詳細頁。
+
+---
+
 ## 測試 22：共識 EPS / 估值指標類 dataset 探測（2026-10-06 grill 追加）
 
 **目的**：確認追價安全圈所需的「2 年後 EPS」是否有免費來源。
@@ -1047,8 +1191,9 @@ uv pip install --python "$env:TEMP\opencode\dataprobe\Scripts\python.exe" yfinan
   **歷史長度不同，定義相同**
 - 曾稱股利資料「2015–2018 每年僅 1 筆，明顯缺漏」→ **判斷錯誤**，2330 2019 年
   才改季度配息，早期每年 1 筆是正確的（測試 18）
-- 曾稱自建還原「三條免費路全斷，唯一阻塞」→ **測錯 dataset 名稱**，
-  `TaiwanStockCapitalReductionReferencePrice` 才是不存在的，正確來源是
+- 曾稱自建還原「三條免費路全斷，唯一阻塞」→ **該 dataset 並非不存在，而是需付費**，
+  `TaiwanStockCapitalReductionReferencePrice` 名稱正確、官方總覽有列，
+  真正原因是需 Backer（免費層級回 `400 "Your level is free"`），正確來源是
   **`TaiwanStockDividendResult`**（測試 19）
 
 ### 更正軌跡

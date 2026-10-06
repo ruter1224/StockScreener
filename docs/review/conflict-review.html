@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>選股系統 — 衝突比對</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --card2:#1e222b; --line:#2a2f3a;
+    --txt:#e6e8ee; --dim:#9aa3b2; --accent:#6ea8fe; --warn:#f5a524;
+    --bad:#ef6461; --ok:#4ec9a0; --purple:#b48ead;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    line-height:1.7; font-size:16px;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:40px 24px 80px}
+  h1{font-size:28px; margin:0 0 6px}
+  .sub{color:var(--dim); font-size:14px; margin-bottom:36px}
+  h2{font-size:20px; margin:44px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line)}
+  h3{font-size:16px; margin:24px 0 10px; color:var(--accent)}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:16px 0}
+  .card.hot{border-color:var(--warn); background:#1b1a15}
+  .tag{display:inline-block; font-size:12px; padding:2px 9px; border-radius:99px; margin-right:6px; vertical-align:middle}
+  .t-hot{background:#3d2f10; color:var(--warn)}
+  .t-later{background:#232a26; color:var(--ok)}
+  .t-block{background:#3a1f1f; color:var(--bad)}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:15px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--dim); font-weight:500; font-size:13px; background:var(--card2)}
+  tr:last-child td{border-bottom:none}
+  .f{font-family:"JetBrains Mono",Consolas,monospace; background:#10131a; border:1px solid var(--line);
+     border-radius:6px; padding:2px 7px; font-size:13.5px; color:var(--accent)}
+  pre{background:#10131a; border:1px solid var(--line); border-left:3px solid var(--purple);
+      border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:13.5px; line-height:1.9; margin:12px 0}
+  pre .k{color:var(--accent)} pre .c{color:var(--dim)} pre .n{color:var(--warn)}
+  .box{border-left:3px solid var(--accent); background:var(--card2); padding:12px 16px; border-radius:0 8px 8px 0; margin:14px 0}
+  .box.warn{border-color:var(--warn)}
+  .box.bad{border-color:var(--bad)}
+  .box.ok{border-color:var(--ok)}
+  .muted{color:var(--dim); font-size:14px}
+  ul{margin:8px 0; padding-left:22px}
+  li{margin:5px 0}
+  .vs{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:16px 0}
+  .vs > div{background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:16px}
+  .vs .h{font-size:14px; color:var(--dim); margin-bottom:8px}
+  @media(max-width:640px){.vs{grid-template-columns:1fr}}
+  .seg{display:flex; gap:8px; margin:14px 0}
+  .seg button{flex:1; background:var(--card2); border:1px solid var(--line); color:var(--dim);
+    padding:10px; border-radius:8px; cursor:pointer; font-size:14px; font-family:inherit}
+  .seg button.on{background:#1d3557; color:var(--txt); border-color:var(--accent)}
+  .hidden{display:none}
+  .opt{border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:10px 0; background:var(--card2)}
+  .opt .rec{border-color:var(--ok)}
+  .opt .t{font-weight:600; margin-bottom:4px}
+  .badge{font-size:11px; padding:2px 7px; border-radius:99px; background:#12352a; color:var(--ok); margin-left:8px; vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>選股系統 — 衝突比對</h1>
+<div class="sub">比對「智慧選股系統」＋「追加安全圈」兩份筆記本來源 vs. 我們 10-05 的決策紀錄</div>
+
+<!-- ============ 共識 ============ -->
+<h2>先講沒衝突的</h2>
+<div class="card">
+<p>三階段漏斗（<b>選賽道 → 選公司 → 選價格</b>）、五階層杜邦連乘、Tier → 目標 PER 對應表、站隊加權 30/30/25/15、ROE 門檻、業外比接近 1 —— 這些 10-05 都已經收進決策紀錄，<span style="color:var(--ok)">沒有衝突</span>。</p>
+</div>
+
+<!-- ============ 核心爭議 ============ -->
+<h2>衝突 1　兩套估值共用同一個 PER，但時間軸不同 <span class="tag t-hot">現在就要決定</span></h2>
+
+<div class="card hot">
+<p class="muted">同一支股票，Tier A 給 25~30 倍 PER。這個數字乘在「5 年後的 EPS」和「2 年後的 EPS」上，意思完全不一樣。</p>
+
+<div class="seg">
+  <button class="on" onclick="show(0)">模式 A　安全邊際</button>
+  <button onclick="show(1)">模式 B　追價安全圈</button>
+</div>
+
+<div id="m0">
+  <pre>預估 5 年後 EPS = <span class="n">近12月EPS × (1+產業CAGR)^5</span>
+長期價值 = 預估EPS × 目標PER
+安全邊際 = (長期價值 − 股價) ÷ 股價</pre>
+  <div class="box bad"><b>產出：單一數字</b>　安全邊際 %　<span class="muted">通過門檻 / 不通過</span></div>
+</div>
+
+<div id="m1" class="hidden">
+  <pre>地板價 = <span class="n">預估 2 年後 EPS × PER 下限</span>
+天花板 = 預估 2 年後 EPS × PER 上限</pre>
+  <div class="box ok"><b>產出：區間 + 三態</b></div>
+  <table>
+    <tr><th>狀態</th><th>意義</th></tr>
+    <tr><td>🟢 低於地板價</td><td>極度安全</td></tr>
+    <tr><td>🟡 地板～天花板</td><td>可逢低佈局</td></tr>
+    <tr><td>🔴 超過天花板</td><td>禁止追高</td></tr>
+  </table>
+</div>
+
+<div class="box warn">
+<b>為什麼這是問題</b><br>
+PER 的原意是「當期股價 ÷ 當期獲利」。把它乘在<b>第 5 年</b>的 EPS 上，得到的是<b>終值</b>，不是合理價。<br><br>
+這也解釋了為什麼安全邊際門檻在講義裡從未被驗證到 100%（§4.10）—— 講義所有案例最高只有 93%。<span class="muted">不是巧合，是公式本身概念就滑。</span><br><br>
+相對地，2 年是比較近的未來，「2 年後用 25 倍買」語意上比較站得住腳。
+</div>
+
+<h3>三種處理方式</h3>
+
+<div class="opt rec">
+  <div class="t">A　兩套獨立計算並存<span class="badge">建議</span></div>
+  <p>各自輸出，都存進結果表，不互相推導。同一支股票會有兩個數字。</p>
+  <p class="muted">＋ 現在還沒有真實資料能判斷哪個有用，你會自己看出哪個在對的時候有鑑別力<br>－ 兩個數字可能打架，看板要多一欄解釋</p>
+</div>
+
+<div class="opt">
+  <div class="t">B　追價安全圈當主線，安全邊際降為參考欄</div>
+  <p>理由：它有區間、有三態、有 Tier 對應，資訊量比較大。</p>
+  <p class="muted">－ 等於變相放棄價值投資的「買便宜」紀律<br>－ 這會讓 §4.10 變成不需要解決（反而好事？）</p>
+</div>
+
+<div class="opt">
+  <div class="t">C　安全邊際當 AND 硬門檻，追價安全圈三態並列</div>
+  <p>兩個都留，但一個管資格、一個管位置。</p>
+  <p class="muted">－ 仍需拍一個安全邊際門檻數字，而那個數字講義沒驗證過<br>－ 概念上最乾淨，但把最弱的一環留在硬路徑上</p>
+</div>
+
+<div class="box">
+<b>我的看法</b>：你說「兩者並存」是對的 —— 追價安全圈和安全邊際本來就服務不同需求，價值股不會因為不在圈內就不該看。A 和你的判斷一致，而且<b>不提前綁死</b>。等 Phase 1 取到真實分布，再決定要不要讓安全邊際升級成硬門檻。
+</div>
+
+<!-- ============ 門檻 ============ -->
+<h2>衝突 2　程式碼把門檻寫死 <span class="tag t-hot">現在就要決定</span></h2>
+
+<div class="card hot">
+<p>追加安全圈那份程式碼裡：</p>
+<pre><span class="c"># 寫死的門檻</span>
+<span class="k">cond_roe</span>      = df['roe'] &gt; <span class="n">10.0</span>
+<span class="k">cond_leverage</span> = df['financial_leverage'] &lt; <span class="n">3.0</span>
+<span class="k">cond_non_op</span>    = (ratio &gt;= <span class="n">0.8</span>) &amp; (ratio &lt;= <span class="n">1.2</span>)
+<span class="k">if</span> align_score &lt; <span class="n">8.0</span></pre>
+<p>違反 <span class="f">D1</span>：門檻必須可設定。</p>
+</div>
+
+<div class="box warn">
+<b>而且這不是純工程問題。</b>講義自己的統計（2003–2024）顯示門檻拉高有副作用：
+<table>
+<tr><th>過去 5 年平均 ROE</th><th>未來 5 年年化報酬</th></tr>
+<tr><td>5%~10%</td><td>8.7%</td></tr>
+<tr style="background:#1b1a15"><td><b>10%~15%　← 甜蜜區</b></td><td><b>8.4%</b></td></tr>
+<tr><td>20%~25%</td><td>6.7%</td></tr>
+<tr><td>&gt; 30%</td><td style="color:var(--bad)"><b>2.9%</b></td></tr>
+</table>
+<div class="muted">門檻拉高等於自動排除高槓桿、小型股、景氣循環股。你輸入 25 想「挑優秀公司」，實際上在挑報酬最差的區間。</div>
+</div>
+
+<div class="box">
+<b>建議</b>：門檻參數化之外，<b>門檻設在甜蜜區（10~15%）之外時，介面主動提示</b>。這比「照跑不誤」有用。
+</div>
+
+<!-- ============ 之後 ============ -->
+<h2>衝突 3、4、5　可以推遲，但別忘記</h2>
+
+<div class="card">
+<table>
+<tr><th style="width:32px">#</th><th>問題</th><th>影響</th></tr>
+<tr>
+  <td><b>3</b></td>
+  <td>複合鍵缺 <span class="f">board</span><br><span class="f">PRIMARY KEY (stock_id, date, type)</span></td>
+  <td>興櫃／上市同代號會撞。<span class="f">§2.3</span> 已定案要用 <span class="f">(stock_id, board)</span></td>
+</tr>
+<tr>
+  <td><b>4</b></td>
+  <td>用 SQLite 寫入<br><span class="f">create_engine("sqlite:///")</span></td>
+  <td>spec 定的是 Parquet raw 層 ＋ DuckDB <span class="f">read_only</span>。方向相反</td>
+</tr>
+<tr>
+  <td><b>5</b></td>
+  <td>寬表沒有期間欄位<br><span class="f">MAX(CASE WHEN type=… THEN value END)</span></td>
+  <td>全部 collapse 在 <span class="f">(stock_id, date)</span>，沒有季度粒度 —— <b>這會把「累計值 or 單季值」在架構層直接抹掉，TTM 也算不出來</b></td>
+</tr>
+</table>
+<div class="box bad">
+<b>第 5 項決定順序</b>：先解「FinMind 財報是累計值還是單季值」（Phase 0 待查證），<b>再</b>定財報表粒度。反過來做就會重做。
+</div>
+</div>
+
+<!-- ============ 順序 ============ -->
+<h2>接下來的順序</h2>
+<div class="card">
+<table>
+<tr><th style="width:40px">步</th><th>動作</th><th>狀態</th></tr>
+<tr><td><b>1</b></td><td>定衝突 1（兩套估值如何並存）</td><td><span class="tag t-hot">待決</span></td></tr>
+<tr><td><b>2</b></td><td>定衝突 2（門檻參數化 ＋ 甜蜜區提示）</td><td><span class="tag t-hot">待決</span></td></tr>
+<tr><td><b>3</b></td><td>Phase 0：驗證財報是累計 or 單季</td><td><span class="tag t-block">阻擋</span></td></tr>
+<tr><td><b>4</b></td><td>財報表粒度 → 才能解衝突 5</td><td><span class="tag t-later">可推遲</span></td></tr>
+<tr><td><b>5</b></td><td>複合鍵 ＋ 儲存層（衝突 3、4）</td><td><span class="tag t-later">可推遲</span></td></tr>
+<tr><td><b>6</b></td><td>才寫骨架</td><td><span class="tag t-later">最後</span></td></tr>
+</table>
+<p class="muted">理由：門檻與架構分離（D3「門檻先決」），而財務粒度會決定資料表長相 —— 在它確定之前寫骨架等於白寫。</p>
+</div>
+
+</div>
+
+<script>
+function show(i){
+  document.getElementById('m0').classList.toggle('hidden', i!==0);
+  document.getElementById('m1').classList.toggle('hidden', i!==1);
+  document.querySelectorAll('.seg button').forEach((b,j)=>b.classList.toggle('on', j===i));
+}
+</script>
+</body>
+</html>

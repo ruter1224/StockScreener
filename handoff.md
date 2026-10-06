@@ -200,6 +200,23 @@ uv run python -m unittest discover tests    # 應 69 passed
 
 免 token 即可取用多數 dataset；`.env` 已建但非抓取必要。
 
+### ⚠️ 抓取途中 log 會「停住」是正常的（但原因要分清）
+
+`logs/run_all-*.log` 只在**每 25 檔**與**每個 dataset 開頭／結尾**寫入。
+單一 dataset 跑 4 小時、期間 log 一行都不動是正常的，看實際進度要用：
+
+- **儀表板** <http://127.0.0.1:8765/>（讀 DB，即時準）
+- 或 `uv run python fetch.py --status`
+
+**但要分辨兩種情況**：
+- log 時間戳停在「該 dataset 的開頭」→ 正常，只是還沒到下一個 25 檔
+- log 時間戳停在「很久以前」且 parquet 仍在新增 → **log 寫入管道壞了**，
+  資料照跑不誤，但失去可觀測性。2026-10-07 就發生過一次
+  （原因：`continue` 跳過進度 log，已於 `553330b` 修復）
+
+判斷手法：比對 `data/sync_state.db` 的修改時間與 `logs/*.log` 的修改時間。
+DB 在更新但 log 沒動 → 管道問題，不是沒在抓。
+
 ### 看中文 log 會以為亂碼，其實不是
 
 `run_all.py` 已設 `PYTHONIOENCODING=utf-8`、`PYTHONUTF8=1`，log **位元組層級已驗證乾淨**

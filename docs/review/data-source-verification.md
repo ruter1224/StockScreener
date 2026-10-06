@@ -733,7 +733,9 @@ resp.json()        # {'msg': 'Requests reach the upper limit. https://finmindtra
 可據此判斷是「用法錯誤」而非「無權限」。
 
 ⚠️ **官方文件本身有 casing 錯誤**：`TaiwanstockGovernmentBankBuySell`（`stock` 小寫）
-實際呼叫回 `422` enum 錯誤 → **不接受此寫法**。呼叫時必須照抄實際可用的名稱。
+實測回 `422` enum 錯誤 → **不接受此寫法**。
+**正確名稱是 `TaiwanStockGovernmentBankBuySell`（大寫 S）**，該名稱可用但需 Backer 付費。
+呼叫時必須以 API enum 為準，不可照抄文件。（詳見測試 25.2）
 
 ### 24.3 官方 MCP Server 的定位
 
@@ -797,7 +799,11 @@ TaiwanStockIndustryChainMoneyFlow          TaiwanStockDispositionSecuritiesPerio
 TaiwanStockHoldingSharesPer                TaiwanStock10Year
 TaiwanStockPriceLimit                      TaiwanBusinessIndicator
 TaiwanStockBrokerDailyConcentration        TaiwanStockMarginMaintenance
+TaiwanStockGovernmentBankBuySell           TaiwanFutOptInstitutionalInvestors
 ```
+
+⚠️ 最後一項 `TaiwanStockGovernmentBankBuySell` 是因**官方文件把 casing 寫錯**（小寫 `stock`）
+才漏測的，用正確名稱重測才確認它存在但需付費。（見測試 25.3）
 
 ⚠️ 其中 **`TaiwanStockIndustryChainMoneyFlow`（台股產業鏈資金流向）**原本可能對
 五大維度的「產業鏈地位」有參考價值，但**免費拿不到**。
@@ -811,6 +817,94 @@ TaiwanStockBrokerDailyConcentration        TaiwanStockMarginMaintenance
 - 總覽頁只涵蓋**台灣市場**；另有美國／英國／歐洲／日本市場與宏觀指標分類，
   但其 dataset 清單不在同一頁。
 - 該頁**不含**付費方案說明、schema、欄位定義。schema 需查各 dataset 詳細頁。
+
+---
+
+## 測試 25：官方資料集總覽的錯誤查證（2026-10-06）
+
+### 25.1 方法：用 API enum 當 ground truth 做 diff
+
+不靠眼睛逐行看文件，而是**取得服務端所有合法 dataset 名稱**當基準，再與文件比對。
+
+取得方式：送一個不存在的 dataset 名，服務端回 `422` 並在 body 中列出完整 enum：
+```json
+{"detail":[{"type":"enum","loc":["query","dataset"],
+  "msg":"Input should be 'CnnFearGreedIndex', 'CrudeOilPrices', ...（共 106 個）"}]}
+```
+→ **這是機器可讀的第一手基準，比文件可靠。**
+
+比對結果：API enum **106** 個合法名，文件頁解析出 **93** 個。
+
+### 25.2 ⚠️ 官方文件的 5 個錯誤（已逐一實測確認）
+
+| # | 文件寫的 | API 實測 | 性質 |
+|---|---|---|---|
+| 1 | `TaiwanstockGovernmentBankBuySell` | **`TaiwanStockGovernmentBankBuySell`**（大寫 S）| **casing 錯誤** → 照文件呼叫回 422 |
+| 2 | `TaiwanStockTradingDailyReportSecIdAgg` | `422` enum 錯誤 | **dataset 不存在** |
+| 3 | `taiwan_stock_tick_snapshot` | `422` enum 錯誤 | **dataset 不存在** |
+| 4 | `taiwan_futures_snapshot` | `422` enum 錯誤 | **dataset 不存在** |
+| 5 | `taiwan_options_snapshot` | `422` enum 錯誤 | **dataset 不存在** |
+
+⚠️ **第 1 項是「照文件寫就會失敗」** —— 大小寫差一個 `s`，API 直接回 422。
+第 2~5 項是「文件列出但服務端沒有」，推測為**文件寫了但功能未上線或已下架**。
+這 4 項都屬「即時資料／分點」類，命名風格也與其他 dataset 不同
+（`taiwan_` 底線小寫 vs `TaiwanStock` 駝峰），推測為不同時期的產物。
+
+### 25.3 修正後才測到的兩個 dataset
+
+因為文件把 casing 寫錯，我第一次測 `TaiwanStockGovernmentBankBuySell` 時直接跳過了。
+用 API enum 的正確名稱重測：
+
+| dataset | 結果 |
+|---|---|
+| `TaiwanStockGovernmentBankBuySell`（正確 casing）| `400 "Your level is free"` → **需 Backer**（不是不存在）|
+| `TaiwanFutOptInstitutionalInvestors` | 帶 `data_id` 時 `200`（rows 0），不帶時需付費 |
+
+⚠️ **`TaiwanStockGovernmentBankBuySell` 是八大行庫買賣表**，
+原本因文件 casing 錯誤被我歸類為「不存在」，實際是**需付費**。
+→ 再次驗證「判定可用性必須用 API enum 為基準，不可只看文件」。
+
+### 25.4 文件沒列但 API  有的（合理缺漏，非錯誤）
+
+外國市場（`USStockInfo`／`UKStockPrice`／`JapanStockPrice`／`EuropeStockPrice`）、
+宏觀指標（`CrudeOilPrices`／`GoldPrice`／`InterestRate`／`GovernmentBondsYield`）、
+`TaiwanFutOptInstitutionalInvestors`。
+
+→ 這些在文件的**其他分類頁**，本頁只涵蓋台灣市場，屬正常分工。
+
+### 25.5 「93 種」這個數字是對的
+
+文件宣稱 93 種，但各分類筆數加總為 94。差額來源：
+`TaiwanStockTradingDailyReport` 因 query 參數不同（by 股票代碼／by 券商代碼）
+被列成兩行，去重後正好 93。**數字無誤。**
+
+### 25.6 另兩個 API 有、文件未在本頁列出但實測可用
+
+| dataset | 狀態 | 內容 |
+|---|---|---|
+| `TaiwanFutOptTickInfo` | ✅ 免 token 可用 | 10,415 筆，欄位 `callput` / `code` / `expire_price` / `listing_date` |
+| `TaiwanFutOptDailyInfo` | ✅ 免 token 可用 | 1,406 筆，欄位 `code` / `name` / `type` |
+
+→ 期權資料，但本專案 v1 不使用（無衍生性金融商品需求）。
+
+### 25.7 給未來查證的固定做法
+
+⚠️ **不要靠讀文件判斷 dataset 可用性。三步：**
+
+```
+1. 送不存在的名稱 → 從 422 body 取得 API enum（合法名單）
+2. 用正確名稱呼叫 → 看回應類型判定性質
+3. 與文件比對 → 找出文件錯誤
+```
+
+**回應 → 性質對應：**
+
+| 回應 | 性質 | 處理 |
+|---|---|---|
+| `422` enum 錯誤 | **名稱不存在**（含大小寫錯誤）| 對照 enum 找正確名 |
+| `400 "Your level is free"` | dataset 存在但**需付費** | 記錄，評估是否買 |
+| `400 "parameter data_id don't provide"` | **用法錯誤**（全域型別帶了 data_id）| 去掉 data_id |
+| `200` + `rows: 0` | 名稱與用法都對，但**期間無資料** | 調整日期範圍 |
 
 ---
 

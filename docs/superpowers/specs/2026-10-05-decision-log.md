@@ -723,7 +723,9 @@ ROE = 稅賦優勢 × 業外獲利比 × 利益率 × 資產周轉率 × 財務�
 | 新增 | 五維度評分表（時間戳、append-only、可選備註） |
 | 新增 | 定價層：Tier → 目標 PER → 長期價值 → 安全邊際（§4.9） |
 
-**尚未修改任何一項。** 依 D3「門檻先決」，順序為：Phase 0 驗證財務資料 → Phase 1 取分布定門檻 → Phase 2/3 架構 → 一次性寫回 spec。
+**✅ 已完成（2026-10-06）**：所有條目已寫入新規格書
+`docs/superpowers/specs/2026-10-06-stock-screener-spec.md`。
+舊 spec `2026-10-01-finmind-data-pipeline-design.md` 已標記 superseded。
 
 ---
 

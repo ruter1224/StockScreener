@@ -10,6 +10,8 @@
 - 詞彙表：`CONTEXT.md` ｜ 決策紀錄：`docs/superpowers/specs/2026-10-05-decision-log.md`
 - **資料來源實測**：`docs/review/data-source-verification.md`（26 項測試）
 - Obsidian：`OpenCode專區/StockScreener/2026-10-06.md`
+  （當天筆記只留**最新一次**收工＋收工索引表；更早的收工已歸檔到同資料夾的
+  `歷史日誌.md`，內容原樣搬入未改寫）
 
 已確認的決策（細節與依據在 decision-log）：
 

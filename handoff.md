@@ -2,15 +2,14 @@
 
 ## ⏯️ 目前做到哪
 
-**抓取程式已完成並測試通過，資料尚未全量抓取。**
+**抓取程式已完成（45 測試全過），資料抓取掛機中，UI 與自動接續腳本已上線。**
 
 - **藍圖**：`agents.md`（階段路線圖、文件分工、陷阱、常用指令）
-- 程式碼：`fetch.py` ＋ `src/core/` ＋ `src/storage/`（**7 個檔案，35 個單元測試全過**）
+- 程式碼：`fetch.py` ＋ `src/` ＋ `monitor.py`（進度儀表板）＋ `run_all.py`（自動接續）
 - 規格書：`docs/superpowers/specs/2026-10-06-stock-screener-spec.md`（14 節，現行實作依據）
 - 詞彙表：`CONTEXT.md`
 - 決策紀錄：`docs/superpowers/specs/2026-10-05-decision-log.md`
 - **資料來源實測**：`docs/review/data-source-verification.md`（26 項測試）
-- **抓取說明**：`README.md`（**晚上要看這份**）
 
 已確認的決策（細節與依據在 decision-log）：
 
@@ -34,127 +33,172 @@
 ## 🚦 目前狀態
 
 - 可運行：**抓取器可運行**；財務指標計算、介面尚未開始
-- 資料：**尚未全量抓取**（本機測試過 62 檔，之後已清空）
-- Git：`master` = `origin/master`（已同步）
-- Obsidian：`OpenCode專區/StockScreener/2026-10-06.md`
-- **資料面驗證完成**：26 項測試，額度與可用性全部有實測依據
+- **抓取掛機中**（2026-10-06 晚，DESKTOP-5241OJK）
+  - 進度看儀表板 **<http://127.0.0.1:8765/>**（`monitor.py`，每 5 秒刷新）
+  - 或 `uv run python fetch.py --status`
+  - 全部完成時會寫 `logs/ALL_DONE.txt` ＋ 彈 Windows 通知
+- **Git**：`master` = `origin/master`（收工前已推）
+- **Obsidian**：`OpenCode專區/StockScreener/2026-10-06.md`
 
-## ▶️ 晚上在另一台電腦怎麼做
+## 📍 專案路徑（重要，2026-10-06 變更）
 
-### ⚠️ 兩台電腦不能同時抓
+**專案已從雲端硬碟搬到本機硬碟。**
 
-額度是**帳號層級**的 600 次/小時，兩台合計會超標。
-建議：**這台只做 `--limit` 小量測試，家裡那台抓全量。**
-
-### 步驟
-
-```bash
-# 1. 拉程式碼
-git pull
-
-# 2. 建環境（首次）
-uv sync
-
-# 3. 先抓全域型（5 個 request，幾秒完成，建議先做）
-uv run python fetch.py --global-only
-
-# 4. 抓主要 dataset（單一約 4 小時，中斷可續傳）
-uv run python fetch.py --dataset TaiwanStockFinancialStatements
-
-# 5. 看進度
-uv run python fetch.py --status
-```
-
-**中斷了就再跑同一指令**，會自動跳過已完成的檔案續傳。
-
-想限時（例如掛機一小時就停）：
-```bash
-uv run python fetch.py --dataset TaiwanStockBalanceSheet --max-seconds 3600
-```
-
-### 預計耗時（額度 540/小時）
-
-| dataset | 檔數 | 耗時 |
+| 機器 | 路徑 | 說明 |
 |---|---|---|
-| FinancialStatements | 2037 | 3.8 h |
-| BalanceSheet | 2037 | 3.8 h |
-| Price | 2507 | 4.6 h |
-| CashFlowsStatement | 2037 | 3.8 h |
-| PER | 2037 | 3.8 h |
-| MonthRevenue | 2037 | 3.8 h |
-| DividendResult | 2507 | 4.6 h |
-| 全域型（5 個） | — | 秒 |
+| **DESKTOP-5241OJK** | `E:\OpenCode\Stock Screener(股票篩選)` | **現行工作目錄、data 存這裡** |
+| 雲端硬碟上的舊副本 | （不再使用）| 見下方「⚠️ 舊副本狀態」 |
 
-**單一 dataset 約 4 小時，建議分天抓。全抓完約 28 小時。**
+### 資料存在哪裡
 
-### 安全機制（已內建，不要移除）
+`data/`（sync_state.db ＋ parquet）**存在 DESKTOP-5241OJK 的本機硬碟 `E:`**，不在雲端硬碟。
 
-依官方 <https://finmind.github.io/BanIPPolicy/>：
-- **4xx 連續 3 次熔斷停止**（累積 4xx 會被封鎖 IP 30 分鐘）
-- `403 ip banned` 立即停止
-- `402` 額度用盡立即停止
-- 5xx／網路錯誤才重試（最多 3 次）
+搬移原因與教訓：
 
-## ➡️ 下一步
+1. 舊位置在雲端硬碟，同步軟體會在**檔案還沒寫完時就同步**，造成
+   `sync_state.db` 說「已完成」但 `data/raw/` 對應的 parquet 不見（或不完整）。
+2. 續傳邏輯原本只讀 SQLite，看不到檔案遺失，會直接跳過 → **資料空洞，且不會報錯**。
+3. 已修（commit `f5a488e`）：續傳改以 `writer.exists()` 實際檔案為準，
+   檔案遺失就從頭重抓（`last_date` 在檔案不存在時不可信）。
+4. 雲端硬碟上的 data 應視為**不可靠**，不要再把抓取產物放回雲端同步路徑。
 
-### 兩台電腦分工（重要）
+### ⚠️ 舊副本狀態
 
-⚠️ **額度是帳號層級 600 次/小時，兩台不能同時抓。**
+雲端硬碟上的舊副本**仍存在**，且是**過時的**：缺本次的
+`monitor.py`、`run_all.py`，git 也落後 2 個 commit（但工作區有同樣的未提交修改，
+打開會看到「有未提交變動」的假象）。
 
-| 機器 | 任務 |
-|---|---|
-| **家裡那台** | 全量抓取（分天，單一 dataset 約 4 小時）|
-| **這台** | 階段 2 財務指標計算 |
+- **一律以 git ＋ `E:\OpenCode\...` 為準，不要再開舊副本**
+- 舊副本要不要刪除由使用者手動決定（本 agent 不刪）
 
-### 家裡那台的指令
+## ▶️ 明天在另一台主機怎麼做
+
+### 程式碼
 
 ```bash
+cd <該機的專案路徑>          # 路徑由使用者提供，尚未確定
 git pull
-uv sync
-uv run python fetch.py --global-only                              # 5 秒
-uv run python fetch.py --dataset TaiwanStockFinancialStatements   # 約 4 小時
-uv run python fetch.py --status                                    # 看進度
+uv sync                       # 首次
+uv run python -m unittest discover tests   # 應 45 passed
 ```
 
-中斷就重跑同一指令，會自動續傳。
+### ⚠️ 兩台不能同時抓
 
-### 階段 2 待做（本機）
+額度是**帳號層級** 600 次/小時。這台（DESKTOP-5241OJK）正在抓，
+另一台**不要**跑 fetch，除非這台的抓取已結束（看 `logs/ALL_DONE.txt` 或儀表板）。
 
-1. **實算篩選剩幾檔**（原未解問題 #2，需財務指標先算出來）
-   ⚠️ 記得 `align_score` 無資料來源，實際可用條件是**三個不是四個**
+### 抓取（若要在那台執行）
+
+```bash
+uv run python run_all.py      # 依序抓 7 個 dataset，中斷可續傳
+uv run python monitor.py      # 另開，看進度 UI（:8765）
+```
+
+### 下一階段（階段 2 財務指標計算）
+
+待辦（詳見 `agents.md` 階段 2 區塊）：
+
+1. 實算篩選剩幾檔（原未解問題 #2）⚠️ `align_score` 無資料來源，可用條件是三個不是四個
 2. ROE 多年平均（3 年／5 年）＋ TTM ROE 參考顯示
-3. 杜邦五項（`IncomeAfterTaxes` 不可用 `NetIncome`，後者只有 20 期）
-4. 營收 CAGR（`TaiwanStockMonthRevenue`，⚠️ 用 `revenue_year`+`revenue_month` 不是 `date`）
-5. 還原股價合併 `DividendResult` + `ParValueChange` + `SplitPrice`
+3. 杜邦五項（`IncomeAfterTaxes`，不可用 `NetIncome`）
+4. 營收 CAGR（`revenue_year`+`revenue_month`，**不是 `date`**）
+5. 還原股價：`DividendResult` + `ParValueChange` + `SplitPrice`
 
-## ✅ 已完成（10-06）
+**資料要不要複製到另一台：尚未決定**（使用者明日提供該機路徑後再決定搬運方式）。
+建議不要在雲端硬碟上直接同步 `data/`（見上方教訓），用 zip 一次搬移較安全。
 
-1. 資料來源 26 項實測（額度、可用性、靜默錯誤陷阱全部有依據）
-2. grill 設計 8 題（產品契約、五維評分不可砍、略過篩選入口、ROE 多年平均、PE 只提示、維度 2／4 定位、安全圈 EPS 全手動、長期價值 CAGR 獨立）
-3. 規格書（14 節）＋ CONTEXT.md 詞彙表
-4. 五項未解問題實測（**3 項已解決**：PER 21 年、額度確認、創新板只標註）
-5. 官方文件查證（**發現文件本身有 5 個錯誤**，修正 4 處錯誤歸因）
-6. **抓取程式**（client／sync_state／writer ＋ 35 個測試）
-7. **補建 `agents.md` 專案藍圖**（階段路線圖、文件分工、靜默錯誤陷阱、常用指令）
+## 🛠️ 2026-10-06 晚 在 DESKTOP-5241OJK 遇到的問題與處理
+
+### 1. 專案路徑從雲端硬碟搬到本機（使用者主導）
+
+- 變更：工作目錄改 `E:\OpenCode\Stock Screener(股票篩選)`
+- 處理：搬移後在新位置 `uv sync` 重建環境、重跑 45 測試與 ruff 全過
+- 影響：data 與 sync_state.db 跟著到本機，雲端副本作廢
+
+### 2. 雲端同步造成 parquet 遺失，續傳會靜默跳過
+
+- 症狀：`sync_state.db` 記錄 5 個全域 dataset 全完成，但 `data/raw/` 檔案不見
+- 根因：續傳只信 SQLite 狀態，不看檔案
+- 修法：`fetch.py` 續傳改比對 `writer.exists()`；新增 `SyncState.ok_ids()`
+  （與 `done_ids` 差在排除 `empty`——empty 本來就沒檔，不能當遺失重抓）
+- 驗證：新增 10 個測試（`TestParquetLossRecovery`），共 45 passed
+
+### 3. 抓取 log 中文變亂碼
+
+- 症狀：`run_all` 的 log 出現 `略??235` 這類問號
+- 根因：Windows 主控台預設 cp950，Python 寫檔時用 cp950 編碼
+- 修法：`run_all.py` 明確設 `PYTHONIOENCODING=utf-8`、`PYTHONUTF8=1`
+  （在 `os.environ.setdefault`，子行程繼承）
+- 補充：先前用 PowerShell 看到的「??」部分是**顯示層**問題，
+  逐位元組驗證 log 本身乾淨（0 個 U+FFFD、0 個 `?`）。看中文 log 請用
+  `Get-Content -Encoding UTF8` 或直接開儀表板
+
+### 4. 進度儀表板算出的分母不對
+
+- 症狀：UI 算 2154 檔，fetch.py 實抓 2037 檔 → 進度條永遠到不了 100%
+- 根因：UI 從本地 parquet 推股票池（含已下市股），fetch.py 用當期 API 結果
+- 修法：`fetch.py` 抓取時寫 `data/raw/universe.json`（權威股票池），
+  `monitor.py` 讀它當分母，**兩邊不再各算各的**
+
+### 5. PowerShell 5.1 不支援 `Start-Process -Environment`
+
+- 症狀：參數驗證錯誤，行程沒啟動
+- 修法：改在父層先 `$env:PYTHONIOENCODING="utf-8"`，或由腳本內部 `os.environ` 設定
+
+### 6. 抓取進度與排程工具（新增）
+
+| 檔 | 用途 |
+|---|---|
+| `monitor.py` | 進度 UI，<http://127.0.0.1:8765/>，只讀 DB 不干擾抓取 |
+| `run_all.py` | 依序抓 7 個 dataset，可 Ctrl+C 中斷續傳，完成彈通知 |
+| `logs/` | 抓取 log（git 忽略）|
+
+掛機指令（DESKTOP-5241OJK，2026-10-06 19:38 起）：
+
+```bash
+# 背景執行（無視窗）
+.venv\Scripts\python.exe run_all.py     → logs\runner.out.log / run_all-YYYYMMDD-HHMM.log
+.venv\Scripts\python.exe monitor.py --no-browser  → logs\monitor.out.log
+```
+
+## ✅ 已完成（10-06 晚）
+
+1. 專案搬至本機 E:，環境重建、45 測試 + ruff 全過
+2. `monitor.py` 進度儀表板（純標準庫，無新依賴）
+3. `run_all.py` 自動接續腳本 ＋ Windows 完成通知
+4. parquet 遺失恢復（含 10 個新測試）
+5. `universe.json` 統一進度分母
+6. 兩個 commit 已推（`f5a488e` 續傳修正、`0e0d038` UI 與腳本）
 
 ## ⚠️ 注意事項
 
+### 掛機行程不會活過重開機
+
+`run_all.py` / `monitor.py` 是背景行程，**重開機後不會自己恢復**。
+開機後要重跑：
+
+```bash
+cd "E:\OpenCode\Stock Screener(股票篩選)"
+uv run python monitor.py --no-browser   # 先開 UI
+uv run python run_all.py                # 續傳抓取
+```
+
+### 抓取中不能關機／休眠
+
+斷網會讓抓取失敗（續傳可救回，但該輪會停）。暫停請 `Ctrl+C` 或停行程。
+
 ### Token 不是必需的
 
-實測確認**免 token 即可取用多數 dataset**。token 唯一用途是查額度。
-`.env` 已建立但非抓取必要。
+免 token 即可取用多數 dataset；`.env` 已建但非抓取必要。
 
 ### ETF 保留但不抓財務
 
-- stock master 保留全部 2507 檔證券
-- 財務類 dataset 只抓個股 2037 檔（ETF 沒財報會回空浪費額度）
-- 行情類（Price／DividendResult）抓全部
+- stock master 保留全部 2507 檔（ETF 保留）
+- 財務類只抓 2037 檔有財報的個股，行情類抓全部 2507 檔
 
 ### 還原股價需要三個來源
 
-先前只用 `TaiwanStockDividendResult`（除權息），**漏了面額變更**。
-還原因子需合併 `DividendResult` + `ParValueChange` + `SplitPrice`。
-（`CapitalReductionReferencePrice` 實測回空，不可用）
+`DividendResult` + `ParValueChange` + `SplitPrice`（`CapitalReductionReferencePrice` 實測回空，不可用）
 
 ### 三種錯誤性質要分清
 
@@ -170,66 +214,28 @@ uv run python fetch.py --status                                    # 看進度
 1. 損益表 `EquityAttributableToOwnersOfParent` 是「**淨利**歸屬母公司」，**不是權益**
 2. `NetIncome` 只有 20 期（止於 2019），**用 `IncomeAfterTaxes`**（46 期）
 3. `_per` 後綴是「占總資產百分比」，**整組忽略**
-4. `TaiwanStockInfo` 是**變更事件流**（4,329 列／300+ 個 date／32 列 date=null），需 upsert
+4. `TaiwanStockInfo` 是**變更事件流**，需取 `date` 最新一列（`latest_by_stock`）
 5. `origin_name` 中文名大量重複，**必須用英文 key 硬編碼對應**
+6. 普通股判斷**不能只看 4 碼數字**，要結合 `industry_category` ＋ 字母後綴（`classify_universe`）
+7. 進度分母**只能用 `universe.json`**，不要從本地 parquet 重推（會含下市股）
 
-## ⚠️ 本次踩的坑（2026-10-06 下午）
+### 安全機制（已內建，不要移除）
 
-### 1. 用「4 碼數字」判斷普通股是錯的
-
-0050／0051／0056／00411A／00679B 全是 4 碼（或含字母）卻都是 ETF，
-抓財務資料全部回 `rows=0`，白跑額度。
-
-**正確判斷**：`industry_category` 內容 + 代號是否帶字母後綴。
-程式已實作（`fetch.py` 的 `build_universe`）。
-
-### 2. `UnicodeEncodeError` 中斷長時間抓取
-
-log 用 emoji（`⏱`／`🔴`／`⚠`），Windows 主控台 cp950 不支援，
-跑到一半直接崩潰。**這條教訓 `data-source-verification.md` 早就記過，本次重犯。**
-
-已修：`log()` 過濾符號。
-
-### 3. 刪 `.venv` 用錯方法
-
-用 `Remove-Item -Recurse` 刪 Python 虛擬環境，會留下半殘目錄，
-之後 `uv sync` 報「not a valid Python environment」且**無法自我修復**。
-
-**正確做法**：`uv venv --clear`。
-
-### 4. `.python-version` 不能用 `Set-Content` 寫
-
-PowerShell 的 `Set-Content -Encoding UTF8` 會加 BOM，`uv` 讀不了。
-改用 `[System.IO.File]::WriteAllText($p, "3.12", (New-Object System.Text.UTF8Encoding($false)))`。
-
-### 5. dataset 錯誤分類有五種不是四種
-
-**同一個 dataset 帶不同參數會得到不同錯誤**：
-- 帶 `data_id` → 免費層可用
-- 不帶 `data_id`（全域查詢）→ `400 Your level is register`（需付費）
-
-我因此連續誤判三次。分類邏輯已寫在 `classify()`，測試涵蓋 11 種組合。
-
-### 6. 官方文件本身有 5 個錯誤
-
-`TaiwanstockGovernmentBankBuySell`（小寫 s）照抄會 422；
-另有 4 個 dataset 文件列出但服務端沒有。
-
-→ **判定 dataset 可用性要以 API enum 為基準**，方法見
-`data-source-verification.md` 測試 25.7。
-
-## ⚠️ 本機 Chezmoi 待處理
-
-`chezmoi status` 與 `chezmoi git -- status` 均於 2026-10-06 確認乾淨，本次無變動。
+- 4xx 連續 3 次 → **熔斷停止**
+- `403 ip banned` → 立即停止
+- `402` 額度用盡 → 立即停止
+- 5xx／網路錯誤 → 才重試（最多 3 次）
 
 ## 🕐 最後更新
 
-- 時間：2026-10-06（收工）
-- 更新者：OpenCode @ LAP2021-T153
-- HEAD：見 `git log -1`（本次為「收工：補上『下一步』章節」）
-- Git push：✅ 已推（收工前 local == origin/master）
-- Chezmoi push：—（無變動）
-- 目標驗證：✅ 35 個單元測試通過（`uv run python -m unittest discover tests`）
-- 目標驗證：✅ ruff 全過（`uv run ruff check src fetch.py tests`）
-- 目標驗證：✅ 端到端可跑（`--global-only` 5 dataset 成功、
-  `--dataset TaiwanStockFinancialStatements --limit 6` 成功、`--status` 正確）
+- 時間：2026-10-06（收工，第二次）
+- 更新者：OpenCode @ **DESKTOP-5241OJK**
+- HEAD：見 `git log -1`
+- Git push：✅ 已推（`f5a488e` + `0e0d038`）
+- Chezmoi push：—（`chezmoi status` 於 2026-10-06 確認乾淨）
+- 目標驗證：✅ 45 個單元測試通過（`uv run python -m unittest discover tests`）
+- 目標驗證：✅ ruff 全過（`uv run ruff check src fetch.py monitor.py run_all.py tests`）
+- 目標驗證：✅ 儀表板可讀（HTTP 200，12 個 dataset 進度正確，分母與 fetch.py 一致）
+- 目標驗證：✅ 抓取實際進行中（`TaiwanStockFinancialStatements` 持續增加，0 錯誤）
+- ⚠️ **抓取掛機中，重開機會停**（重啟方式見「掛機行程不會活過重開機」）
+- 目標驗證：⚠️ 舊雲端副本未清理（由使用者決定，見「舊副本狀態」）

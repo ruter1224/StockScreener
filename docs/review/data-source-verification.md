@@ -670,11 +670,82 @@ date=20260101 (元旦) → stat="很抱歉，沒有符合條件的資料!", tabl
 
 ---
 
+## 測試 22：共識 EPS / 估值指標類 dataset 探測（2026-10-06 grill 追加）
+
+**目的**：確認追價安全圈所需的「2 年後 EPS」是否有免費來源。
+
+### 驗證方法（避免誤判）
+
+先以**已驗證可用**的 `TaiwanStockPER` 為對照組，確認參數組合正確；
+再測猜測的 dataset 名稱。以 422 回應的 enum 錯誤清單判定 dataset 是否存在。
+
+> ⚠️ 本輪第一次測試全部回 400/422，連已驗證可用的 dataset 也一樣。
+> 原因是漏了必填參數。**這正是「測錯就宣布不可行」的同一個陷阱，第二次踩到。**
+> 已修正為帶 `start_date` 並抓取錯誤 body 內容。
+
+### 結果
+
+| dataset | 結果 | 說明 |
+|---|---|---|
+| `TaiwanStockPER` | ✅ **200，667 筆** | 意外收穫，見下 |
+| `TaiwanStockInstitutionalInvestorsBuySell` | ✅ 200，3,335 筆 | 三大法人買賣超（籌碼面，講義提及但未實測）|
+| `TaiwanStockMarginPurchaseShortSale` | ✅ 200，667 筆 | 融資融券 |
+| `TaiwanStockShareholding` | ✅ 200，667 筆 | 外資持股、發行股數 |
+| `TaiwanStockCashFlowsStatement` | ✅ 200，270 筆 | 現金流量表 |
+| `TaiwanStockNews` | ✅ 200，14 筆 | 新聞標題＋連結 |
+| `TaiwanStockTradingDailyReport` | ❌ 400 | **需 Backer**（免費層級限制）|
+| `TaiwanStockConsensus` | ❌ 422 | enum 錯誤 → **dataset 不存在** |
+| `TaiwanStockEstimate` | ❌ 422 | enum 錯誤 → **不存在** |
+| `TaiwanStockTargetPrice` | ❌ 422 | enum 錯誤 → **不存在** |
+| `TaiwanStockPERatio` | ❌ 422 | 不存在 |
+| `TaiwanStockAnalysis` | ❌ 422 | 不存在 |
+| `TaiwanStock3YearStatement` | ❌ 422 | 不存在 |
+| `TaiwanStockChipDailyReport` | ❌ 422 | 不存在 |
+
+### 結論
+
+**FinMind 無任何共識 EPS／預估 EPS／目標價 dataset。** 需 CMoney／FactSet／Bloomberg／券商 API，均為付費。
+→ 驅動決策：追價安全圈的「2 年後 EPS」**全手動輸入，系統不做自動預測**（decision-log §2.15）。
+
+### ⚠️ 意外收穫：`TaiwanStockPER` 免 token 可用
+
+```json
+{"date":"2024-01-02","stock_id":"2330","PER":"17.17","PBR":"4.59","dividend_yield":"1.85"}
+```
+
+每日 `PER`／`PBR`／`dividend_yield`，667 筆（2024-01-01 起）。
+
+**用途**：§2.13 決定的「PE 提示」本來需要自行計算（收盤價 ÷ TTM EPS），
+此 dataset 直接提供官方 PER，可省去計算且口徑一致。
+⚠️ **資料期間待確認**：本次查詢指定 `start_date=2024-01-01`，回 667 筆，
+實際起始日可能更早，需另測（見「下一個測試」）。
+
+### 方法教訓（本輪追加）
+
+| 錯誤 | 為什麼沒報錯 |
+|---|---|
+| **只抓 HTTP status code 不看 body** | 422 的 body 裡有完整 enum 清單，能立刻知道哪些 dataset 存在。忽略 body 會誤判成「需要付費」|
+| **漏必填參數就下結論** | 所有 dataset 一律 400，看起來像「全部不可用」。必須用已知可用的 dataset 當對照組 |
+
+---
+
 ## 下一個測試
 
 1. ~~**月營收 `t187ap05_L` 歷史深度**~~ ✅ 已測：不可用，但有替代方案（測試 20–21）
 2. ~~**免費額度實測**~~ ✅ 已測：20 次連續請求無問題（測試 21.2）
-3. `Trading_turnover` 單位意義（低優先）
+3. ~~**共識 EPS dataset 探測**~~ ✅ 已測：FinMind 不存在（測試 22）
+4. `TaiwanStockPER` 實際資料期間（測試 22 意外收穫，本次只查 2024 起，需確認完整長度）
+5. `Trading_turnover` 單位意義（低優先）
+6. `TaiwanStockTradingDailyReport` 是否有免費替代（已確認需 Backer）
+
+### 測試 22 發現但尚未評估的可用 dataset
+
+| dataset | 狀態 | 可能用途 |
+|---|---|---|
+| `TaiwanStockInstitutionalInvestorsBuySell` | ✅ 可用 | 籌碼面：三大法人買賣超（講義資料地圖列為籌碼面來源）|
+| `TaiwanStockShareholding` | ✅ 可用 | 外資持股比例、發行股數 |
+| `TaiwanStockCashFlowsStatement` | ✅ 可用 | 自由現金流（講義否決過濾提到 FCF）|
+| `TaiwanStockMarginPurchaseShortSale` | ✅ 可用 | 融資融券 |
 
 **資料面待查已清空**：阻擋 Phase 0 的三項全解、10 年財報、10 年日線、欄位對齊、靜默錯誤三項、已還原股價皆有結論。月營收端點雖不可用，但季度財報完全足夠。**資料面目前零阻塞。**
 

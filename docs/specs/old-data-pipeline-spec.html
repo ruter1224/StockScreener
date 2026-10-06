@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>選股系統 — 舊規格書（資料管線設計 13 節）</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --card2:#1e222b; --line:#2a2f3a;
+    --txt:#e6e8ee; --dim:#9aa3b2; --accent:#6ea8fe; --warn:#f5a524;
+    --bad:#ef6461; --ok:#4ec9a0; --purple:#b48ead;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    line-height:1.7; font-size:16px;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:40px 24px 80px}
+  h1{font-size:28px; margin:0 0 6px}
+  .sub{color:var(--dim); font-size:14px; margin-bottom:36px}
+  h2{font-size:20px; margin:44px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line)}
+  h3{font-size:16px; margin:24px 0 10px; color:var(--accent)}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:16px 0}
+  .card.hot{border-color:var(--warn); background:#1b1a15}
+  .tag{display:inline-block; font-size:12px; padding:2px 9px; border-radius:99px; margin-right:6px}
+  .t-hot{background:#3d2f10; color:var(--warn)}
+  .t-later{background:#232a26; color:var(--ok)}
+  .t-block{background:#3a1f1f; color:var(--bad)}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:15px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--dim); font-weight:500; font-size:13px; background:var(--card2)}
+  tr:last-child td{border-bottom:none}
+  .f{font-family:"JetBrains Mono",Consolas,monospace; background:#10131a; border:1px solid var(--line);
+     border-radius:6px; padding:2px 7px; font-size:13.5px; color:var(--accent)}
+  pre{background:#10131a; border:1px solid var(--line); border-left:3px solid var(--purple);
+      border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:13.5px; line-height:1.9; margin:12px 0}
+  pre .k{color:var(--accent)} pre .c{color:var(--dim)} pre .n{color:var(--warn)}
+  .box{border-left:3px solid var(--accent); background:var(--card2); padding:12px 16px; border-radius:0 8px 8px 0; margin:14px 0}
+  .box.warn{border-color:var(--warn)}
+  .box.bad{border-color:var(--bad)}
+  .box.ok{border-color:var(--ok)}
+  .muted{color:var(--dim); font-size:14px}
+  ul{margin:8px 0; padding-left:22px}
+  li{margin:5px 0}
+  ol{padding-left:24px} ol li{margin:8px 0}
+  a{color:var(--accent)}
+  .superseded{background:#3a1f1f; border:1px solid var(--bad); border-radius:12px; padding:18px 22px; margin:20px 0}
+  .superseded b{color:var(--bad)}
+  nav{background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:24px 0}
+  nav a{margin-right:14px; font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>股票篩選系統設計：FinMind 資料管線</h1>
+<p class="sub">2026-10-01 ｜ 13 節 ｜ <b>已於 2026-10-06 被取代（superseded）</b></p>
+
+<div class="superseded">
+<b>⚠️ 本文件已於 2026-10-06 被取代，不得作為實作依據。</b><br>
+現行規格書：<a href="../superpowers/specs/2026-10-06-stock-screener-spec.html">2026-06 規格書</a>
+（保留本文件僅為歷史追溯之用）
+</div>
+
+<nav>
+<a href="#s1">1. 背景與目標</a>
+<a href="#s2">2. 連接方式</a>
+<a href="#s3">3. 資料方案與額度</a>
+<a href="#s4">4. Token 機制</a>
+<a href="#s5">5. 安全協議</a>
+<a href="#s6">6. IP 封鎖政策</a>
+<a href="#s7">7. 資料集分級</a>
+<a href="#s8">8. 已知資料陷阱</a>
+<a href="#s9">9. 系統架構</a>
+<a href="#s10">10. 一鍵啟動</a>
+<a href="#s11">11. 執行順序</a>
+<a href="#s12">12. 待確認事項</a>
+<a href="#s13">13. 參考資料</a>
+</nav>
+
+<h2 id="s1">1. 背景與目標</h2>
+<p>建立一個台股篩選系統。資料來源為 FinMind（台灣開放金融資料平台，92 種台股資料集）。</p>
+<div class="box">
+<b>核心決策：資料全部落地本地，篩選邏輯跑本地。</b>不查詢時直接打 API。<br>
+<span class="muted">理由：篩選要快、要能回測、要能離線改條件、篩選過程不能燒 API 額度。</span>
+</div>
+<div class="box bad">
+<b>⚠️ 已被推翻：</b>「篩選系統」定位已於 2026-10-05 改為<b>研究輔助系統</b>（非全自動篩選器，不產出投資建議）。
+</div>
+
+<h2 id="s2">2. 連接方式決策</h2>
+<p>FinMind 官方提供三種「串接方式」，<b>本專案不採用任何一種作為資料來源</b>。</p>
+<table>
+<tr><th>方式</th><th>實際是什麼</th><th>本專案的定位</th></tr>
+<tr><td>Agent Skill（<span class="f">/finmind</span> 指令檔）</td><td>一個 Markdown 指令檔，在 CLI 裡一句一句問</td><td>開發期驗證欄位用</td></tr>
+<tr><td>MCP Server（<span class="f">uvx finmind-mcp</span>）</td><td>AI 自動呼叫、適合多輪追問的 agentic 分析</td><td>開發期資料探勘用</td></tr>
+<tr><td><b>REST API / Python SDK</b></td><td><span class="f">api.finmindtrade.com/api/v4</span> + <span class="f">FinMind.data.DataLoader</span></td><td><b>唯一資料來源</b></td></tr>
+</table>
+<div class="box">
+<b>理由：</b>Agent Skill 與 MCP Server 都是給 AI 對話工具用的。它們沒有批次排程、沒有本地快取、每次對話重打 API、額度消耗最快。篩選系統需要的是可批次、可增量、可重跑的取資料管道。
+</div>
+
+<h2 id="s3">3. 資料方案與額度</h2>
+<p><b>先不用付費，用免費 token 驗證整條流程。</b></p>
+
+<h3>3.1 額度與方案</h3>
+<table>
+<tr><th>方案</th><th>價格</th><th>限制</th><th>資料集</th><th>授權</th></tr>
+<tr><td>Free</td><td>NT$0</td><td>600 次/小時（一天 14,400 次）</td><td>45</td><td>Non-commercial</td></tr>
+<tr><td>Backer</td><td>NT$699/月</td><td>1,600 次/小時</td><td>81</td><td>Non-commercial</td></tr>
+<tr><td>Sponsor</td><td>NT$999/月</td><td>6,000 次/小時</td><td>97</td><td>Non-commercial</td></tr>
+<tr><td>Sponsor Pro</td><td>NT$3,330/月</td><td>20,000 次/小時</td><td>97 + 全市場 parquet</td><td>Commercial</td></tr>
+</table>
+<div class="box warn">
+<b>關鍵限制：</b>免費方案不能省略 <span class="f">data_id</span>，只能逐檔抓。
+</div>
+<div class="box">
+<b>授權範圍：</b>使用者不得將即時資料直接呈現於 web、App 等對外介面，亦不得對外再散布原始資料或建立鏡像服務。本專案自用，符合。
+</div>
+
+<h3>3.2 免費方案的缺口</h3>
+<table>
+<tr><th>缺口</th><th>影響</th><th>處理方式</th></tr>
+<tr><td><span class="f">TaiwanStockPriceAdj</span>（還原價）</td><td>拿不到</td><td><s>暫用未還原日線，UI 必須明確標示長區間報酬率會失真</s></td></tr>
+<tr><td><span class="f">TaiwanStockWeekPrice</span> / <span class="f">MonthPrice</span></td><td>拿不到</td><td>自己從日線 aggregate</td></tr>
+<tr><td>免 <span class="f">data_id</span> 全市場查詢</td><td>慢</td><td>逐檔抓，單執行緒排程</td></tr>
+<tr><td><span class="f">TaiwanStockKBar</span>（分 K）</td><td>拿不到</td><td>不需要，日線自己算</td></tr>
+</table>
+<div class="box ok">
+<b>✅ 已解決：</b>還原價缺口已找到免費官方解法 ——
+<span class="f">TaiwanStockDividendResult</span> 提供官方 <span class="f">reference_price</span> 與 <span class="f">before_price</span>，
+因子 <span class="f">= reference_price / before_price</span>，免 token（測試 16–19，10 檔 151 筆驗證通過）。
+</div>
+
+<h2 id="s4">4. Token 機制（7 天期限）</h2>
+<p>免費 token <b>有效期 7 天</b>（使用者實際觀察，官方文件未載明此期限）。</p>
+
+<h3>4.1 Token 有兩個消費者</h3>
+<table>
+<tr><th>消費者</th><th>需要 token 的時機</th></tr>
+<tr><td>Streamlit 介面</td><td>使用者開著瀏覽器時</td></tr>
+<tr><td>下載器 / 排程同步</td><td>掛機 1.6 天、或每日 18:30 自動跑，使用者不在瀏覽器裡</td></tr>
+</table>
+<div class="box"><b>結論：</b>token 必須落地到檔案。只存 session state 會讓排程同步完全不可用。</div>
+
+<h3>4.2 落地方式</h3>
+<p><b>明文 <span class="f">.env</span> + <span class="f">.gitignore</span></b>（已確認採此方案）。</p>
+
+<h3>4.3 額度與有效性查詢</h3>
+<pre><span class="c"># 原文寫法</span>
+GET https://api.web.finmindtrade.com/v2/user_info
+Authorization: Bearer {token}
+→ { user_count, api_request_limit }</pre>
+<div class="box bad">
+<b>⚠️ 已被推翻（實測 2026-10-06）：</b>
+<table style="margin-top:8px">
+<tr><th>端點</th><th>HTTP</th><th>回應</th></tr>
+<tr><td><span class="f">api.finmindtrade.com/api/v4/user_info</span></td><td>404</td><td>不存在</td></tr>
+<tr><td><span class="f">api.web.finmindtrade.com/v2/user_info</span></td><td>200</td><td><span class="f">{"msg":"請輸入 token","status":400}</span></td></tr>
+</table>
+<span class="muted">→ 無 token 無法查詢額度。</span>
+</div>
+
+<h3>4.4 過期防護三層</h3>
+<ol>
+<li>記錄 <span class="f">token_saved_at</span>，UI 顯示倒數</li>
+<li><b>每次同步開始前先打 <span class="f">/user_info</span> 做 pre-flight 檢查</b></li>
+<li>抓取中每 100 requests 再驗一次</li>
+</ol>
+<div class="box bad">
+<b>⚠️ 已被推翻：</b>第 2、3 層依賴 <span class="f">/user_info</span>，該端點無 token 時不可用 → <b>「同步前檢查 token」的保護機制不可靠</b>，spec §4.3 的 pre-flight 步驟需改寫。
+</div>
+
+<h2 id="s5">5. FinMind 安全協議與合規做法</h2>
+<h3>5.1 官方協議內容</h3>
+<ul>
+<li><b>傳輸層：</b>所有端點皆為 HTTPS/TLS</li>
+<li><b>認證層：</b>Bearer token 置於 <span class="f">Authorization</span> header</li>
+<li><b>儲存層：</b>無規定。隱私權政策第 10 條僅要求「妥善保管存取憑證，避免外洩」</li>
+</ul>
+
+<h3>5.2 本專案的合規措施</h3>
+<table>
+<tr><th>措施</th><th>防什麼</th></tr>
+<tr><td>僅 HTTPS</td><td>傳輸竊聽</td></tr>
+<tr><td>Token 走 <span class="f">Authorization</span> header，<b>不放 query string</b></td><td>token 進伺服器 access log</td></tr>
+<tr><td><b><span class="f">.env</span> 進 <span class="f">.gitignore</span></b></td><td><b>真正的外洩管道：此為 git repo 且兩台電腦共用</b></td></tr>
+<tr><td><span class="f">.env</span> 檔案 ACL 限制當前使用者</td><td>同機器其他帳號讀取</td></tr>
+<tr><td>Token 不寫入 Obsidian／handoff／commit message</td><td>專案既有規則已涵蓋</td></tr>
+<tr><td>Log 僅顯示 token 前 4 碼</td><td>貼 log、截圖時外洩</td></tr>
+</table>
+
+<h2 id="s6">6. IP 封鎖政策與請求策略</h2>
+<p>官方文件明載：短時間內累積大量 4xx 請求會觸發 IP 封鎖，<b>封鎖 30 分鐘</b>。</p>
+
+<h3>6.1 分級重試策略</h3>
+<table>
+<tr><th>回應</th><th>處理</th></tr>
+<tr><td>4xx（<span class="f">TokenIllegal</span> 等）</td><td><b>不重試</b>，立即停止該 dataset</td></tr>
+<tr><td>402（額度用完）</td><td>非錯誤，停止並記錄</td></tr>
+<tr><td>5xx</td><td>exponential backoff，<b>最多 3 次</b></td></tr>
+<tr><td>403 + <span class="f">ip banned</span></td><td><b>全域停止</b>，標記「封鎖中，30 分鐘後解除」</td></tr>
+</table>
+
+<h3>6.2 請求速率</h3>
+<div class="box">
+<b>單執行緒，每 7.2 秒一次請求</b>（500 次/小時，額度 600 留 100 緩衝）。<b>不使用併發。</b><br>
+<span class="muted">官方壓力測試顯示伺服器可承受 10～50 requests/秒，但本專案的瓶頸是帳號額度 600/小時（0.167 requests/秒），非伺服器能力。</span>
+</div>
+<div class="box ok">設計修正紀錄：先前建議「併發 5～10」是錯的，已收回。</div>
+
+<h3>6.3 維護時段</h3>
+<p><b>每週日凌晨 00:00～03:00 伺服器維護。</b>1.6 天掛機下載必然經過此時段，同步器需自動暫停並於 03:00 後續跑。</p>
+
+<h2 id="s7">7. 資料集分級</h2>
+<p><b>不採「全部下載」策略。</b>92 個資料集中有多張高頻巨獸。</p>
+
+<h3>7.1 陷阱：5 秒頻率資料集</h3>
+<table>
+<tr><th>資料集</th><th>頻率</th><th>全市場估算量</th></tr>
+<tr><td><span class="f">TaiwanStockStatisticsOfOrderBookAndTrade</span></td><td>每股每 5 秒</td><td>1,900 檔 × 3,240 筆/日 ≈ <b>615 萬筆/日</b>，一年 1.5 億列</td></tr>
+<tr><td><span class="f">TaiwanVariousIndicators5Seconds</span></td><td>每 5 秒</td><td>91 檔指數</td></tr>
+</table>
+
+<h3>7.2 核心層（優先抓，免費可取得）</h3>
+<pre><span class="k">TaiwanStockPrice</span>                    <span class="k">TaiwanStockFinancialStatements</span>
+<span class="k">TaiwanStockPER</span>                      <span class="k">TaiwanStockBalanceSheet</span>
+<span class="k">TaiwanStockMonthRevenue</span>             <span class="k">TaiwanStockCashFlowsStatement</span>
+<span class="k">TaiwanStockInstitutionalInvestorsBuySell</span>
+<span class="k">TaiwanStockMarginPurchaseShortSale</span>
+<span class="k">TaiwanStockShareholding</span>             <span class="k">TaiwanStockSecuritiesLending</span>
+<span class="k">TaiwanStockDividend</span>                 <span class="k">TaiwanStockDividendResult</span></pre>
+<p>成本：12 個 × 1,900 檔 ≈ <b>22,800 requests ≈ 免費方案 1.6 天</b>。</p>
+
+<h3>7.3 中繼層（各 1 次 request）</h3>
+<p><span class="f">TaiwanStockInfo</span>、<span class="f">TaiwanStockTradingDate</span>、<span class="f">TaiwanStockTotalReturnIndex</span>、<span class="f">TaiwanStockNews</span> 等。</p>
+
+<h3>7.4 排除層</h3>
+<p>5 秒頻率表、可轉債全系列（backer 起）、即時快照（sponsor）、<span class="f">TaiwanOptionVix</span>（backer 起）。</p>
+
+<h2 id="s8">8. 已知資料陷阱</h2>
+<div class="box warn">
+FinMind 官方文件明載四點，全部寫進 <span class="f">transform/</span> 層，不在 <span class="f">raw_</span> 層處理。
+</div>
+<ol>
+<li><b>興櫃個股 <span class="f">open</span> 是「前日均價」不是開盤價</b> — 可能落在當日 <span class="f">max</span>/<span class="f">min</span> 之外。不要用 <span class="f">open</span> 計算任何指標。</li>
+<li><b>當日無公告成交價時 OHLC 全為 0</b>，但 <span class="f">Trading_Volume</span> 可能是 451。用 <span class="f">close &gt; 0</span> 判斷，<b>不要用 <span class="f">Trading_Volume &gt; 0</span></b>。</li>
+<li><b><span class="f">TaiwanStockInfo</span> 一檔股票可能有多列</b> — 取同一 <span class="f">stock_id</span> 中 <span class="f">date</span> 最新的那一列。</li>
+<li><b>還原價基準</b> — 以最新交易日為基準往前累乘。</li>
+</ol>
+<div class="box bad">
+<b>⚠️ 遺漏：</b>本節未納入實測發現的靜默錯誤陷阱 —
+<span class="f">origin_name</span> 中文名重複（<span class="f">NetIncome</span> vs <span class="f">IncomeAfterTaxes</span>、
+<span class="f">CapitalStock</span> vs <span class="f">CapitalStock_per</span>）、
+以及 <span class="f">TaiwanStockInfo</span> 實為<b>變更事件流</b>（4,329 列／300+ 個 date／32 列 date=null）的完整處理規則。
+</div>
+
+<h2 id="s9">9. 系統架構</h2>
+<pre><span class="k">FinMind REST API / SDK</span>
+      │
+      ▼
+<span class="k">core/finmind_client.py</span>   HTTPS + Bearer header + token bucket + 分級重試
+<span class="k">core/quota.py</span>            /user_info 額度與有效性
+<span class="k">core/datasets.py</span>         資料集註冊表
+<span class="k">core/token_store.py</span>      token 讀寫 + saved_at
+      │
+      ▼
+<span class="k">storage/writer.py</span>        Parquet 分區寫入（raw 層，不可變）
+<span class="k">storage/sync_state.py</span>    水位線表
+      │
+      ▼
+<span class="k">DuckDB (read_only)</span>       查詢層
+      │
+      ▼
+<span class="k">transform/</span>               型別正規化、興櫃與無價日修正
+      │
+      ▼
+<span class="k">metrics/</span>                 衍生指標：報酬率、均線、波動、PER/PBR
+      │
+      ▼
+<span class="k">screener/</span>                篩選條件 = 純函式 (DataFrame → DataFrame + 命中理由)
+      │
+      ▼
+<span class="k">app/ (Streamlit)</span>         網頁介面</pre>
+
+<h3>9.1 raw 層用 Parquet，不用 DuckDB 寫入</h3>
+<div class="box"><b>原因：</b>DuckDB 單寫者限制。下載器掛機或排程同步時會與同時開啟的 Streamlit 搶檔案鎖。Parquet 為檔案級追加，兩者不衝突。</div>
+
+<h3>9.2 raw 層不可變</h3>
+<p><span class="f">raw_&lt;dataset&gt;</span> 只追加、不 UPDATE、不轉型。所有修正在 <span class="f">transform/</span> 層。</p>
+
+<h3>9.3 抓取冪等</h3>
+<pre>dataset | stock_id | last_date | last_sync | row_count | status</pre>
+<ul>
+<li>每次同步只抓 <span class="f">date &gt; last_date</span> 的部分</li>
+<li>每完成一個 <span class="f">stock_id</span> 即 commit，中斷後 <span class="f">--resume</span> 從水位線繼續</li>
+<li>失敗的 stock_id 記錄待重試，不讓單筆失敗拖垮整批</li>
+</ul>
+
+<h3>9.4 screener 是純函式</h3>
+<p>輸入 DataFrame、輸出篩選結果與命中理由，不碰 IO。篩選邏輯可單獨測試，改條件不需重啟服務。</p>
+
+<h3>9.5 交易日與排程</h3>
+<p>排程時間 <b>18:30 之後</b>執行，避開未 complete 的資料與週日 00:00～03:00 維護時段。</p>
+
+<h2 id="s10">10. 一鍵啟動</h2>
+<p>技術棧：Python + DuckDB + Streamlit。依賴管理用 <span class="f">uv</span>。</p>
+<pre><span class="c">:: start.bat</span>
+uv sync
+uv run streamlit run app\main.py</pre>
+<div class="box"><b>資料抓取不綁在啟動流程裡。</b>啟動只開介面；資料不足時 UI 顯示「資料截至 X 日」並提供同步按鈕。</div>
+
+<h2 id="s11">11. 執行順序</h2>
+<pre>階段 0  專案骨架（pyproject / .gitignore / start.bat / AGENTS.md）
+   ↓
+階段 1  探勘 10～20 分鐘
+        實測 12 個核心資料集 schema、免費方案實際範圍
+        產出 docs/datasets-schema.md
+   ↓
+階段 2  抓取層（client / quota / datasets 註冊表 / token_store）
+   ↓
+階段 3  資料落地與同步（writer / sync_state / sync / validate）
+        掛機抓全量，約 1.6 天
+   ↓
+階段 4  介面與篩選條件（等篩選文件到手）</pre>
+<div class="box warn">
+<b>⚠️ 已被取代：</b>現行規格書的執行順序為 階段 0 骨架 → 1 抓取層 → 2 財務指標 → 3 篩選+評分+估值 → 4 介面。
+「階段 1 探勘」已由 2026-10-06 的 22 項實測完成。
+</div>
+
+<h2 id="s12">12. 待確認事項</h2>
+<table>
+<tr><th>#</th><th>事項</th><th>現況</th></tr>
+<tr><td>1</td><td>未還原價的限制能否接受？</td><td>✅ 已解決 — 找到免費官方解法</td></tr>
+<tr><td>2</td><td>篩選文件尚未提供</td><td>✅ 已取得 — 講義在 NotebookLM「財經」筆記本</td></tr>
+<tr><td>3</td><td>免費方案實際回傳範圍未實測</td><td>✅ 已完成 — 22 項實測</td></tr>
+<tr><td>4</td><td>7 天 token 期限為使用者觀察</td><td>⚠️ 仍待確認，但多數 dataset 免 token 可用</td></tr>
+</table>
+
+<h2 id="s13">13. 參考資料</h2>
+<ul>
+<li>llms.txt（方案、額度、端點）：<a href="https://finmind.github.io/llms.txt">finmind.github.io/llms.txt</a></li>
+<li>IP 封鎖政策：<a href="https://finmind.github.io/BanIPPolicy/">BanIPPolicy</a></li>
+<li>使用條款與隱私權政策：<a href="https://finmind.github.io/PrivacyPolicy/">PrivacyPolicy</a></li>
+<li>壓力測試：<a href="https://finmind.github.io/StressTest/">StressTest</a></li>
+<li>更新 Token：<a href="https://finmind.github.io/update_token/">update_token</a></li>
+<li>技術面（資料陷阱）：<a href="https://finmind.github.io/tutor/TaiwanMarket/Technical/">Technical</a></li>
+<li>92 資料集總覽：<a href="https://finmind.github.io/tutor/TaiwanMarket/DataList/">DataList</a></li>
+<li>Agent Skill：<a href="https://finmind.github.io/tutor/ai/AgentSkill/">AgentSkill</a></li>
+<li>MCP Server：<a href="https://finmind.github.io/tutor/ai/Mcp/">Mcp</a></li>
+</ul>
+
+</div>
+</body>
+</html>

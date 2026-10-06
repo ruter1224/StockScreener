@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>選股系統 — 規格書（2026-10-06）</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --card2:#1e222b; --line:#2a2f3a;
+    --txt:#e6e8ee; --dim:#9aa3b2; --accent:#6ea8fe; --warn:#f5a524;
+    --bad:#ef6461; --ok:#4ec9a0; --purple:#b48ead;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    line-height:1.7; font-size:16px;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:40px 24px 80px}
+  h1{font-size:28px; margin:0 0 6px}
+  .sub{color:var(--dim); font-size:14px; margin-bottom:36px}
+  h2{font-size:20px; margin:44px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line)}
+  h3{font-size:16px; margin:24px 0 10px; color:var(--accent)}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:16px 0}
+  .tag{display:inline-block; font-size:12px; padding:2px 9px; border-radius:99px; margin-right:6px}
+  .t-hot{background:#3d2f10; color:var(--warn)}
+  .t-later{background:#232a26; color:var(--ok)}
+  .t-block{background:#3a1f1f; color:var(--bad)}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:15px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--dim); font-weight:500; font-size:13px; background:var(--card2)}
+  tr:last-child td{border-bottom:none}
+  .f{font-family:"JetBrains Mono",Consolas,monospace; background:#10131a; border:1px solid var(--line);
+     border-radius:6px; padding:2px 7px; font-size:13.5px; color:var(--accent)}
+  pre{background:#10131a; border:1px solid var(--line); border-left:3px solid var(--purple);
+      border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:13.5px; line-height:1.9; margin:12px 0}
+  pre .k{color:var(--accent)} pre .c{color:var(--dim)} pre .n{color:var(--warn)}
+  .box{border-left:3px solid var(--accent); background:var(--card2); padding:12px 16px; border-radius:0 8px 8px 0; margin:14px 0}
+  .box.warn{border-color:var(--warn)}
+  .box.bad{border-color:var(--bad)}
+  .box.ok{border-color:var(--ok)}
+  .muted{color:var(--dim); font-size:14px}
+  ul{margin:8px 0; padding-left:22px}
+  li{margin:5px 0}
+  ol{padding-left:24px} ol li{margin:8px 0}
+  a{color:var(--accent)}
+  nav{background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:24px 0}
+  nav a{margin-right:14px; font-size:14px}
+  .divider{background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:16px 20px; margin:24px 0}
+  .divider h3{margin:0 0 8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>股票篩選系統規格書</h1>
+<p class="sub">2026-10-06 ｜ 14 節 ｜ 設計定稿，尚未實作 ｜ <span class="tag t-later">現行實作依據</span></p>
+
+<div class="divider">
+<h3>本文件與其他文件的分工</h3>
+<table style="margin:0">
+<tr><th>文件</th><th>回答什麼問題</th></tr>
+<tr><td><b>本規格書</b></td><td>系統「是什麼、長怎樣」→ <b>實作依據</b></td></tr>
+<tr><td><a href="../superpowers/specs/2026-10-05-decision-log.html">決策紀錄</a></td><td>每個決定的理由與查證過程 → 決策來源</td></tr>
+<tr><td><a href="../../../CONTEXT.html">CONTEXT.md</a></td><td>「詞是什麼意思」→ 詞彙表</td></tr>
+</table>
+</div>
+
+<nav>
+<a href="#s1">1. 定位與契約</a>
+<a href="#s2">2. 篩選條件</a>
+<a href="#s3">3. 五大維度</a>
+<a href="#s4">4. Tier→PER</a>
+<a href="#s5">5. 估值層</a>
+<a href="#s6">6. 資料來源</a>
+<a href="#s7">7. 財務欄位</a>
+<a href="#s8">8. 管線架構</a>
+<a href="#s9">9. 設定檔</a>
+<a href="#s10">10. 介面</a>
+<a href="#s11">11. v1 不做</a>
+<a href="#s12">12. 執行順序</a>
+<a href="#s13">13. 未解問題</a>
+<a href="#s14">14. 參考資料</a>
+</nav>
+
+<h2 id="s1">1. 定位與產品契約</h2>
+
+<h3>1.1 系統是什麼</h3>
+<div class="box"><b>研究輔助系統。</b>系統負責初篩與計算，人工負責評分與取捨。</div>
+<div class="box bad">
+⚠️ <b>不是全自動篩選器，不產出投資建議。</b>這是 2026-10-05 推翻的原定位。
+</div>
+
+<h3>1.2 工作流程</h3>
+<pre><span class="k">使用者設定篩選條件</span>
+      ↓
+<span class="k">系統依條件初篩</span> → 輸出初篩清單（通過／不通過 + 命中理由，<span class="n">不含分數</span>）
+      ↓
+<span class="k">使用者挑選</span>：略過篩選直接評分，或從清單中選取
+      ↓
+<span class="k">使用者人工填寫五大維度分數</span>（各 0~20，合計 0~100）
+      ↓
+<span class="k">系統計算</span>：總分 → Tier → 目標 PER
+      ↓
+<span class="k">使用者輸入預測假設</span>（長期價值 CAGR、2 年後 EPS）
+      ↓
+<span class="k">系統輸出</span>：安全邊際（5 年願景）＋ 追價安全圈（2 年實際）＋ PE 提示</pre>
+
+<h3>1.3 三個關鍵設計</h3>
+<table>
+<tr><th>設計</th><th>內容</th><th>理由</th></tr>
+<tr><td><b>初篩不算分</b></td><td>量化層只輸出通過／不通過 + 命中理由</td><td>D1：量化不參與計分，兩層量尺各自獨立</td></tr>
+<tr><td><b>人工評分不可砍</b></td><td>五維評分是核心功能，全鏈路都要做</td><td>規模由「略過篩選」與篩選條件控制，不靠砍功能解決</td></tr>
+<tr><td><b>硬門檻不是絕對門</b></td><td>「略過篩選」入口，輸入代號可跳過門檻直接評分</td><td>避免篩選誤殺主觀看好的股票</td></tr>
+</table>
+
+<h2 id="s2">2. 篩選條件（量化層）</h2>
+<p>全部為 <b>AND 邏輯</b>（D6）。</p>
+<table>
+<tr><th>條件</th><th>來源</th><th>可覆寫</th></tr>
+<tr><td><b>ROE 下限</b></td><td><b>使用者在一開始設定</b></td><td>✅</td></tr>
+<tr><td>業外獲利比 ∈ [0.8, 1.2]</td><td>講義值</td><td>✅</td></tr>
+<tr><td>財務槓桿 &lt; 3.0</td><td>講義值</td><td>✅</td></tr>
+<tr><td>align_score &lt; 8.0</td><td>講義值</td><td>✅</td></tr>
+</table>
+
+<h3>2.1 ROE 篩選必須用多年平均</h3>
+<div class="box warn">
+⚠️ <b>不可用單一年度或 TTM。</b>講義明確要求長年／近 3~5 年平均，附 SQL：
+</div>
+<pre>WHERE date &gt;= DATE('now', '-3 years')
+GROUP BY stock_id HAVING AVG(roe) &gt; 0.10</pre>
+
+<div class="box">
+<b>講義原文反例（王品 2727，ROE 2017~2023）</b><br>
+<span class="f">13.60% / 8.51% / 7.92% / 6.06% / -4.59% / 7.53% / 32.90%</span><br>
+原文評語：「ROE 長年低檔起伏，唯獨疫情後，受惠民眾外出用餐爆發」<br>
+<span class="muted">→ 單看 2023 年那 32.90% 會完全誤判 — 而 32.90% 落在講義統計的報酬最差區間。</span>
+</div>
+
+<table>
+<tr><th>過去 5 年平均 ROE</th><th>未來 5 年年化報酬</th></tr>
+<tr><td>&lt; 5%</td><td>6.1%</td></tr>
+<tr><td>5%~10%</td><td>8.7%</td></tr>
+<tr style="background:#1b1a15"><td><b>10%~15%</b></td><td><b>8.4%</b></td></tr>
+<tr><td>15%~20%</td><td>7.6%</td></tr>
+<tr><td>20%~25%</td><td>6.7%</td></tr>
+<tr><td>25%~30%</td><td>4.2%</td></tr>
+<tr><td>&gt; 30%</td><td><b>2.9%</b></td></tr>
+</table>
+<p class="muted">資料期間 2003-12-31～2024-12-31，分級為過去 5 年平均 ROE。<br>
+→ ROE 門檻設在此範圍外時，介面提示「已離開講義統計甜蜜區」。</p>
+
+<h3>2.2 TTM ROE 另作參考顯示</h3>
+<div class="box">
+TTM ROE（單一年度內四季平均）<b>保留但不參與篩選</b>，作為「當期獲利品質」參考。
+</div>
+<div class="box warn">
+⚠️ 區分兩種「平均」：<b>分子跨年平均</b>（篩選用）vs <b>分母期初期末平均</b>（單一年度內）。
+</div>
+
+<h3>2.3 本益比只提示不設門檻</h3>
+<div class="box">
+講義交叉表顯示全表最高報酬 <b>13.8%</b> 出現在「ROE 5~10% ＋ PE 5~10 倍」，
+而「ROE 15~20% ＋ PE 20~25 倍」僅 <b>2.1%</b>。原文標題：「便宜比績效更重要」。
+</div>
+<div class="box ok">
+<b>實作：</b>計算「當前近一年平均 PE ÷ Tier 目標 PER」比值，超出時提示。<br>
+<b>不設硬門檻</b>的理由：與 Tier 目標 PER 概念層級不同（當前 vs 應該值）、增加使用者維護負擔。
+</div>
+<div class="box warn">
+⚠️ 講義表格中「ROE &gt;15% ＋ PE 0~5 倍」標為「樣本太少」，不可據以為該區間低 PE 必然好。
+</div>
+
+<h2 id="s3">3. 五大維度評分（主觀層）</h2>
+
+<h3>3.1 維度定義與評分標準</h3>
+<p>各占 20 分，每維四級。<b>五個維度是相加關係。</b></p>
+<table>
+<tr><th>#</th><th>維度</th><th>20~16 頂級</th><th>15~11 優秀</th><th>10~6 普通</th><th>5~0 落後</th></tr>
+<tr><td>1</td><td>產業鏈地位</td><td>統治者</td><td>關鍵寡佔</td><td>供應鏈要角</td><td>價格接受者</td></tr>
+<tr><td>2</td><td>產業成長性</td><td>爆發成長 &gt;30%</td><td>高速成長 20~30%</td><td>溫和成長 10~20%</td><td>停滯或衰退 &lt;10%</td></tr>
+<tr><td>3</td><td>企業護城河</td><td>無法替代</td><td>高門檻</td><td>中等門檻</td><td>無護城河</td></tr>
+<tr><td>4</td><td>財務商業模式</td><td>印鈔機模式</td><td>優質製造</td><td>辛苦錢（代工）</td><td>體質脆弱</td></tr>
+<tr><td>5</td><td>風險折扣因子</td><td>極低風險</td><td>可控風險</td><td>高風險</td><td>極度危險</td></tr>
+</table>
+
+<div class="box warn">
+⚠️ <b>維度 4 名稱易誤導。</b>它不是財務指標，是「這家生意好不好做」的主觀判斷，
+性質與維度 1、維度 3 相同。<b>五大維度中僅維度 2 有客觀數字可對照（CAGR）。</b>
+</div>
+
+<div class="box bad">
+⚠️ <b>杜邦五項不屬於任何維度。</b>杜邦是獨立的獲利品質分析工具，
+與維度 4 的主觀歸類是不同層次的東西。杜邦計算結果僅作<b>參考面板</b>顯示，不自動決定維度 4 分數。
+</div>
+
+<h3>3.2 維度 2 產業 CAGR 對照表</h3>
+<p>維度 2 維持「未來 5 年產業 CAGR」定義。採<b>手動輸入 CAGR ＋ 系統換算建議分數</b>。</p>
+<table>
+<tr><th>欄位</th><th>說明</th></tr>
+<tr><td>產業代碼</td><td>官方 TWSE／TPEx 代碼</td></tr>
+<tr><td>CAGR</td><td>未來 5~10 年預估值</td></tr>
+<tr><td>來源機構</td><td>IDC／TrendForce／Gartner 等</td></tr>
+<tr><td>抓取日期</td><td>CAGR 依賴機構與年份，必須記錄</td></tr>
+</table>
+<div class="box warn">
+⚠️ <b>講義未提供全市場對照表</b>，原文指定由使用者自建。<br>
+⚠️ <b>命名空間錯配</b>：講義 17 項是主題產業，官方代碼是另一套（33+28 種），
+官方<b>沒有「人工智慧」這種產業代碼</b> → 初期覆蓋率必然低，多數股票落在「無資料」狀態。
+</div>
+
+<h3>3.3 風險折扣因子是階梯跳級</h3>
+<div class="box bad">
+⚠️ <b>這是階梯式跳級，不是連續打折。</b>
+</div>
+<div class="box">
+<b>台積電原文案例</b><br>
+產業鏈地位 20、成長性 18、護城河 20、財務 18、
+<b>風險折扣僅 6 分</b>（理由「致命的地緣政治」）→ 總分 <b>84</b> → Tier A（25~30 倍）<br>
+<br>
+若該維度拿滿 20 分 → 總分 <b>98</b> → Tier S（35~40 倍）
+</div>
+<div class="box warn">
+<b>單一維度 14 分差距，目標 PER 差將近 10 倍。</b>
+</div>
+
+<h2 id="s4">4. Tier → 目標 PER</h2>
+<p>目標 PER <b>只由 Tier 決定</b>。CAGR 不作為 PER 的獨立上限。</p>
+<table>
+<tr><th>總分</th><th>Tier</th><th>目標 PER</th><th>講義舉例</th></tr>
+<tr><td>85~100</td><td>Tier S 夢幻企業</td><td>35~40 倍</td><td>輝達</td></tr>
+<tr><td>70~84</td><td>Tier A 頂級成長</td><td>25~30 倍</td><td>台積電、致茂、旺矽</td></tr>
+<tr><td>55~69</td><td>Tier B 穩健優質</td><td>15~20 倍</td><td>世芯-KY、緯穎、萬潤、奇鋐</td></tr>
+<tr><td>40~54</td><td>Tier C 一般企業</td><td>10~15 倍</td><td>廣達、鴻海</td></tr>
+<tr><td>&lt; 40</td><td>Tier D 價值陷阱</td><td>5~10 倍</td><td>景氣循環股</td></tr>
+</table>
+<div class="box warn">
+⚠️ 此鏈<b>不是硬上限</b>：維度 2 拿 0 分時，其餘四維各滿分仍可得 80 分（Tier A）。
+台積電案例（5 年 CAGR 7% → 19~25 倍）證明講者本就不擋。
+</div>
+
+<h3>4.1 產業站隊分數是另一套東西</h3>
+<div class="box bad">⚠️ <b>與 Tier 分數無關，不要混淆。</b></div>
+<table>
+<tr><th>權重</th><th>維度</th></tr>
+<tr><td>30%</td><td>政策護城河</td></tr>
+<tr><td>30%</td><td>地緣韌性</td></tr>
+<tr><td>25%</td><td>定價權力</td></tr>
+<tr><td>15%</td><td>生產效率</td></tr>
+</table>
+<p>判斷基準：加權總分 ≥8 核心配置／6~7 中性觀察／&lt;5 排除。<b>v1 不實作</b>，僅記錄。</p>
+
+<h2 id="s5">5. 估值層</h2>
+
+<h3>5.1 安全邊際（5 年願景）</h3>
+<pre>長期價值 = 近12月累計EPS × (1 + CAGR)⁵ × 目標PER
+安全邊際 = (長期價值 − 股價) ÷ 股價</pre>
+<p><b>輸入為歷史 EPS。</b></p>
+<div class="box">
+<b>門檻：</b>可設定、預設 <b>50%</b>、<b>不設死硬門檻</b>。<br>
+⚠️ 講義建議 &gt;100%，但講義所有實測案例最高僅 93%，100% 門檻從未驗證。
+</div>
+
+<h3>5.2 追價安全圈（2 年實際）</h3>
+<pre>地板價 = 預估2年後EPS × PER下限
+天花板 = 預估2年後EPS × PER上限</pre>
+<div class="box"><b>輸入為預測 EPS，全手動輸入，系統不做任何自動預測。</b></div>
+<div class="box bad">
+⚠️ <b>不採用講義的 CAGR 外推備援式</b>（<span class="f">近12月EPS × (1+產業CAGR)²</span>），四項理由：
+<ol style="margin-bottom:0">
+<li>外推式與維度 2 共用同一個不確定輸入，產生假精確的假數字</li>
+<li>講義自己警告「小型股可能會因時間而被產業淘汰，導致無法跟不上產業複合成長率」</li>
+<li>講義明確警告「一般 AI 概念股不能直接用【產業成長率】或【自身成長率】倍數去套」</li>
+<li>系統代填會模糊「系統計算」與「人給的假設」的界線</li>
+</ol>
+</div>
+<div class="box">
+⚠️ <b>FinMind 無任何共識 EPS／預估 EPS／目標價 dataset</b>（實測確認）。
+機構預估值需 CMoney／FactSet／Bloomberg／券商 API，均為付費。
+</div>
+
+<h3>5.3 兩個數字不可放同一把尺讀</h3>
+<div class="box warn">
+⚠️ <b>安全邊際與安全圈的時間軸與輸入本質不同，不可直接比較。</b>
+</div>
+<table>
+<tr><th></th><th>安全邊際</th><th>追價安全圈</th></tr>
+<tr><td>時間軸</td><td>5 年</td><td>2 年</td></tr>
+<tr><td>EPS 輸入</td><td>歷史（近 12 個月累計）</td><td>預測（2 年後）</td></tr>
+<tr><td>同一個「100%」年化</td><td>約 14.9%</td><td>約 41.4%</td></tr>
+</table>
+<div class="box">
+介面並列顯示時<b>必須明確標示</b>，避免誤讀為同一量尺。
+</div>
+
+<h3>5.4 長期價值公式的 CAGR 獨立設定</h3>
+<div class="box warn">
+⚠️ <b>不可與維度 2 的產業 CAGR 共用。</b>
+</div>
+<pre>維度 2 的產業 CAGR   → 決定「賽道好不好」（評分）
+長期價值公式的 CAGR → 假設「這家公司 5 年 EPS 成長多快」（估值）</pre>
+<div class="box bad">
+共用同一數字會讓<b>維度 2 的影響被計算兩次</b>：維度 2 高分 → 產業 CAGR 高
+→ 公式裡 EPS 成長假設也高 → 長期價值再放大一次。<br>
+講義原文直接否定「公司成長率 = 產業 CAGR」的假設。
+</div>
+<div class="box ok">
+<b>實作：</b>長期價值公式的 CAGR 為獨立可設定欄位，預設可帶入維度 2 的值方便快速輸入，但使用者可改。
+</div>
+
+<h2 id="s6">6. 資料來源（全部經實測確認）</h2>
+<p>完整驗證記錄見 <span class="f">data-source-verification.md</span>（22 項測試）。</p>
+
+<h3>6.1 免 token 可用</h3>
+<table>
+<tr><th>dataset</th><th>內容</th><th>期間</th></tr>
+<tr><td><span class="f">TaiwanStockFinancialStatements</span></td><td>損益（21 個 type），<b>已轉單季值</b></td><td>2015-03 ～ 2026-06（46 期）</td></tr>
+<tr><td><span class="f">TaiwanStockBalanceSheet</span></td><td>資產／權益（103 個 type）</td><td>同上</td></tr>
+<tr><td><span class="f">TaiwanStockCashFlowsStatement</span></td><td>現金流量表</td><td>實測 270 筆</td></tr>
+<tr><td><span class="f">TaiwanStockPrice</span></td><td>未還原 OHLC 日線</td><td>11.7 年（2,864 期）</td></tr>
+<tr><td><span class="f">TaiwanStockPER</span></td><td>每日 PER／PBR／dividend_yield</td><td>⚠️ 完整期間待確認</td></tr>
+<tr><td><span class="f">TaiwanStockDividendResult</span></td><td>官方 <span class="f">reference_price</span>／<span class="f">before_price</span></td><td>2015-06 ～ 2026-09</td></tr>
+<tr><td><span class="f">TaiwanStockInfo</span></td><td>股票主檔（<b>變更事件流</b>，非主檔）</td><td>4,329 列</td></tr>
+<tr><td><span class="f">TaiwanStockTradingDate</span></td><td>交易日曆</td><td>6,936 日（1999–2026）</td></tr>
+<tr><td><span class="f">TaiwanStockInstitutionalInvestorsBuySell</span></td><td>三大法人買賣超</td><td>可用</td></tr>
+<tr><td><span class="f">TaiwanStockShareholding</span></td><td>外資持股</td><td>可用</td></tr>
+<tr><td><span class="f">TaiwanStockMarginPurchaseShortSale</span></td><td>融資融券</td><td>可用</td></tr>
+</table>
+
+<h3>6.2 需 Backer 付費</h3>
+<table>
+<tr><th>dataset</th><th>影響</th></tr>
+<tr><td><span class="f">TaiwanStockPriceAdj</span></td><td>❌ 不需要，已找到免費替代</td></tr>
+<tr><td><span class="f">TaiwanStockTradingDailyReport</span></td><td>❌ 分點資料，v1 不需要</td></tr>
+</table>
+
+<h3>6.3 不存在</h3>
+<div class="box bad">
+<span class="f">TaiwanStockConsensus</span>、<span class="f">TaiwanStockEstimate</span>、
+<span class="f">TaiwanStockTargetPrice</span>、<span class="f">TaiwanStockPERatio</span>、
+<span class="f">TaiwanStockAnalysis</span>、<span class="f">TaiwanStock3YearStatement</span>、
+<span class="f">TaiwanStockChipDailyReport</span> —— 全部回 422 enum 錯誤。
+</div>
+
+<h3>6.4 官方來源</h3>
+<table>
+<tr><th>端點</th><th>內容</th></tr>
+<tr><td>TWSE <span class="f">openapi.twse.com.tw/v1/opendata/t187ap03_L</span></td><td>產業別，1,095 列，33 種代碼</td></tr>
+<tr><td>TPEx <span class="f">tpex.org.tw/openapi/v1/mopsfin_t187ap03_O</span></td><td>產業別，892 列，28 種代碼</td></tr>
+</table>
+<div class="box">兩邊共用同一套數字代碼命名空間（26 種重疊）。</div>
+<div class="box bad">⚠️ TPEx 的 <span class="f">/v1/t187ap03_L</span> <b>不存在</b>，回傳 HTML 首頁。</div>
+
+<h3>6.5 不可用</h3>
+<table>
+<tr><th>來源</th><th>原因</th></tr>
+<tr><td>MOPS 直連</td><td>封鎖頁「安全性考量」，加 cookie 無效</td></tr>
+<tr><td>yfinance / Yahoo</td><td>本機網路層被擋（DNS→180.222.109.251，TCP 不通）</td></tr>
+<tr><td>TWSE <span class="f">TWT48U</span></td><td>忽略 <span class="f">stockNo</span>，且只給預告表非歷史</td></tr>
+<tr><td>TWSE <span class="f">t187ap05_L</span></td><td>只回最新一期，<span class="f">date</span>／<span class="f">year</span>／<span class="f">month</span> 參數全被忽略</td></tr>
+<tr><td>TPEx <span class="f">stk_quote_result.php</span></td><td>日期參數無效（永遠回當日），不含興櫃</td></tr>
+</table>
+
+<h2 id="s7">7. 財務欄位定案</h2>
+<div class="box bad">⚠️ <b>必須用英文 key 硬編碼對應，不可用 <span class="f">origin_name</span> 匹配。</b></div>
+<table>
+<tr><th>項目</th><th>結論</th></tr>
+<tr><td>損益 dataset</td><td><span class="f">TaiwanStockFinancialStatements</span>（<b>已轉單季</b>，TTM 直接相加不需相減）</td></tr>
+<tr><td>資產／權益</td><td><b>不在損益 dataset 內</b>，須另抓 <span class="f">TaiwanStockBalanceSheet</span></td></tr>
+<tr><td>ROE 分子</td><td><b><span class="f">IncomeAfterTaxes</span></b>（46 期全覆蓋）</td></tr>
+<tr><td><span class="f">_per</span> 後綴</td><td><b>占總資產百分比</b>分析表 → <b>整組忽略</b></td></tr>
+<tr><td><span class="f">NetIncome</span></td><td>❌ 只有 20 期（止於 2019），勿用</td></tr>
+<tr><td>EPS</td><td>已確認單季值，四季加總通過驗證</td></tr>
+</table>
+
+<h3>7.1 靜默錯誤陷阱（寫錯不會報錯）</h3>
+<table>
+<tr><th>陷阱</th><th>說明</th></tr>
+<tr><td><span class="f">EquityAttributableToOwnersOfParent</span>（損益表）</td><td>是「<b>淨利</b>歸屬母公司」，<b>不是權益</b></td></tr>
+<tr><td><span class="f">CapitalStock</span> vs <span class="f">CapitalStock_per</span></td><td>中文名完全相同，需確認差異否則重複計數</td></tr>
+<tr><td><span class="f">NetIncome</span> vs <span class="f">IncomeAfterTaxes</span></td><td>中文名幾乎相同，選錯不報錯但數字錯</td></tr>
+<tr><td><span class="f">origin_name</span></td><td>大量欄位中文名重複或近似，不可作為匹配依據</td></tr>
+</table>
+
+<h2 id="s8">8. 資料管線架構</h2>
+<pre><span class="k">FinMind REST API / TWSE・TPEx open data</span>
+      │
+      ▼
+<span class="k">core/finmind_client.py</span>   HTTPS + 分級重試 + 速率控制
+<span class="k">core/datasets.py</span>         資料集註冊表
+      │
+      ▼
+<span class="k">storage/writer.py</span>        Parquet 分區寫入（raw 層，不可變）
+<span class="k">storage/sync_state.py</span>    水位線表
+      │
+      ▼
+<span class="k">DuckDB (read_only)</span>       查詢層
+      │
+      ▼
+<span class="k">transform/</span>               型別正規化、陷阱修正
+      │
+      ▼
+<span class="k">metrics/</span>                 ROE（多年平均＋TTM）、杜邦五項、TTM EPS、營收 CAGR
+      │
+      ▼
+<span class="k">screening/</span>               篩選條件 = 純函式（輸出通過/不通過 + 命中理由）
+      │
+      ▼
+<span class="k">scoring/</span>                 五維評分 → 總分 → Tier → 目標 PER
+      │
+      ▼
+<span class="k">valuation/</span>               安全邊際（5 年）＋ 追價安全圈（2 年）＋ PE 提示
+      │
+      ▼
+<span class="k">app/ (Streamlit)</span>         網頁介面</pre>
+
+<h3>8.1 raw 層用 Parquet，DuckDB 僅讀</h3>
+<div class="box"><b>原因：</b>DuckDB 單寫者限制。下載器掛機或排程同步時會與 Streamlit 搶檔案鎖。Parquet 為檔案級追加，兩者不衝突。</div>
+
+<h3>8.2 raw 層不可變</h3>
+<p><span class="f">raw_&lt;dataset&gt;</span> 只追加、不 UPDATE、不轉型。所有修正在 <span class="f">transform/</span> 層。理由：抓錯資料時重跑 transform 即可，不需重打 API 燒額度。</p>
+
+<h3>8.3 抓取冪等</h3>
+<pre>dataset | stock_id | last_date | last_sync | row_count | status</pre>
+<ul>
+<li>每完成一個 <span class="f">stock_id</span> 即 commit，中斷後從水位線繼續</li>
+<li>失敗的 stock_id 記錄待重試，不讓單筆失敗拖垮整批</li>
+</ul>
+
+<h3>8.4 TaiwanStockInfo 是變更事件流</h3>
+<div class="box warn">
+⚠️ <b>不是主檔。</b>同一支股票在不同 <span class="f">date</span> 各有一列，全庫橫跨 300+ 個 date，另有 32 列 <span class="f">date = null</span>。
+</div>
+<ol>
+<li><b>必須 upsert，不可 append</b>（同一 <span class="f">stock_id</span> 會重覆寫入）</li>
+<li><b><span class="f">date = null</span> 一律視為「早於所有有日期的列」</b>（各資料庫對 null 排序方向不同）</li>
+<li>需記錄 null date 計數以便對帳</li>
+</ol>
+
+<h3>8.5 請求速率</h3>
+<div class="box">
+<b>單執行緒，不使用併發。</b>瓶頸是帳號額度（0.167 requests/秒），非伺服器能力。
+併發只會瞬間燒光額度後吃 402。
+</div>
+<div class="box ok">設計修正紀錄：先前建議「併發 5～10」是錯的，已收回。</div>
+
+<h2 id="s9">9. 設定檔</h2>
+<table>
+<tr><th>檔案</th><th>內容</th></tr>
+<tr><td><span class="f">config/boards.yaml</span></td><td>board 啟用開關與官方產業來源</td></tr>
+<tr><td><span class="f">config/thresholds.yaml</span></td><td>篩選門檻</td></tr>
+<tr><td><span class="f">config/industry_cagr.csv</span></td><td>產業代碼 → CAGR → 來源機構 → 抓取日期</td></tr>
+</table>
+
+<h3>9.1 boards.yaml（資料驅動開關）</h3>
+<pre><span class="k">boards</span>:
+  <span class="k">twse</span>:
+    <span class="n">enabled</span>: <span class="c">true</span>
+    <span class="n">industry_source</span>: <span class="c">TWSE_產業別</span>
+  <span class="k">tpex</span>:
+    <span class="n">enabled</span>: <span class="c">true</span>
+    <span class="n">industry_source</span>: <span class="c">TPEx_SecuritiesIndustryCode</span>
+  <span class="k">emerging</span>:            <span class="c"># 興櫃：未上市，官方無資料，無財報</span>
+    <span class="n">enabled</span>: <span class="c">false</span>
+    <span class="n">industry_source</span>: <span class="c">FinMind_industry_category</span>
+    <span class="n">has_financials</span>: <span class="c">false</span></pre>
+<div class="box">開關與 <span class="f">has_financials</span> 是<b>資料</b>，不是預留程式碼。啟用興櫃時只改 YAML。</div>
+
+<h3>9.2 thresholds.yaml</h3>
+<pre><span class="k">roe</span>:
+  <span class="n">min</span>: <span class="c">12.0</span>              <span class="c"># 使用者設定</span>
+  <span class="n">source</span>: <span class="c">user</span>
+<span class="k">non_operating_ratio</span>:
+  <span class="n">min</span>: <span class="c">0.8</span>
+  <span class="n">max</span>: <span class="c">1.2</span>
+<span class="k">financial_leverage</span>:
+  <span class="n">max</span>: <span class="c">3.0</span>
+<span class="k">align_score</span>:
+  <span class="n">max</span>: <span class="c">8.0</span></pre>
+
+<h2 id="s10">10. 介面</h2>
+<p>Streamlit。三個主要頁面：</p>
+<table>
+<tr><th>頁面</th><th>功能</th></tr>
+<tr><td>篩選</td><td>設定條件 → 執行初篩 → 輸出清單與命中理由</td></tr>
+<tr><td>評分</td><td>輸入代號（略過篩選）或從清單選取 → 填寫五維分數 → 顯示 Tier 與目標 PER</td></tr>
+<tr><td>估值</td><td>輸入 CAGR 與預測 EPS → 顯示安全邊際、安全圈、PE 提示</td></tr>
+</table>
+<div class="box warn">
+⚠️ <b>人工輸入為 append-only</b>，帶時間戳，不覆寫歷史，可附選備註。
+</div>
+<div class="box bad">
+⚠️ <b>風險折扣的階梯效應必須在介面說明。</b>總分跨 Tier 邊界時目標 PER 會整級跳動，
+需提示「總分 84 分與 85 分的目標 PER 相差 5~10 倍」，避免使用者以為是連續關係。
+</div>
+
+<h2 id="s11">11. v1 不實作的項目</h2>
+<table>
+<tr><th>項目</th><th>理由</th></tr>
+<tr><td>產業結構惡化否決過濾</td><td>0~10 主觀評分需「和同業比」，v1 連同業對照資料都沒準備</td></tr>
+<tr><td>企業體質惡化風險否決過濾</td><td>同上</td></tr>
+<tr><td>產業站隊分數</td><td>四維度人工評分，優先級低於公司層級評分</td></tr>
+<tr><td>CAGR 自動外推預測 EPS</td><td>見 §5.2 四項理由</td></tr>
+<tr><td>PE 硬門檻</td><td>見 §2.3</td></tr>
+<tr><td>興櫃（emerging）</td><td>官方無資料、無財報</td></tr>
+</table>
+
+<h2 id="s12">12. 執行順序</h2>
+<pre>階段 0  <span class="k">專案骨架</span>
+        pyproject / .python-version / uv.lock / .gitignore / start.bat
+        config/ 三個設定檔
+      ↓
+階段 1  <span class="k">抓取層</span>
+        client / datasets 註冊表 / writer / sync_state
+        掛機抓全量
+      ↓
+階段 2  <span class="k">財務指標計算</span>
+        ROE（多年平均 + TTM）／杜邦五項／TTM EPS／營收 CAGR
+      ↓
+階段 3  <span class="k">篩選 + 評分 + 估值</span>
+        screening / scoring / valuation
+      ↓
+段階 4  <span class="k">Streamlit 介面</span></pre>
+<div class="box warn">
+<b>階段 1 不可跳：</b>raw 表 schema 需依實測結果建 DDL。照文件猜錯欄位會讓全量抓取白跑。
+</div>
+
+<h2 id="s13">13. 已知未解問題</h2>
+<table>
+<tr><th>#</th><th>問題</th><th>影響</th></tr>
+<tr><td>1</td><td><span class="f">TaiwanStockPER</span> 完整資料期間未確認</td><td>PE 提示的歷史長度</td></tr>
+<tr><td>2</td><td>篩選條件全 AND 後剩幾檔未實算</td><td>若剩不到 30 檔需重新設計條件</td></tr>
+<tr><td>3</td><td>官方產業代碼 → 名稱完整字典未取得</td><td>code→name 對照表完整性</td></tr>
+<tr><td>4</td><td>創新板交易限制內容未查證</td><td>輸出時的風險提示文案</td></tr>
+<tr><td>5</td><td>是否需要 token 才能達到 600 次/小時額度</td><td>目前免 token 可用，但額度上限未驗證</td></tr>
+</table>
+<div class="box">
+📌 詳細分析見 <a href="open-questions.html">已知未解問題分析</a>（問題點 / 影響層面 / 範圍）
+</div>
+
+<h2 id="s14">14. 參考資料</h2>
+<h3>官方文件</h3>
+<ul>
+<li>llms.txt（方案、額度、端點）：<a href="https://finmind.github.io/llms.txt">finmind.github.io/llms.txt</a></li>
+<li>IP 封鎖政策：<a href="https://finmind.github.io/BanIPPolicy/">BanIPPolicy</a></li>
+<li>使用條款與隱私權政策：<a href="https://finmind.github.io/PrivacyPolicy/">PrivacyPolicy</a></li>
+<li>技術面（資料陷阱）：<a href="https://finmind.github.io/tutor/TaiwanMarket/Technical/">Technical</a></li>
+<li>資料集總覽：<a href="https://finmind.github.io/tutor/TaiwanMarket/DataList/">DataList</a></li>
+</ul>
+
+<h3>專案內文件</h3>
+<table>
+<tr><th>文件</th><th>內容</th></tr>
+<tr><td><span class="f">CONTEXT.md</span></td><td>領域詞彙表</td></tr>
+<tr><td>decision-log</td><td>決策紀錄（理由與查證過程）</td></tr>
+<tr><td>data-source-verification</td><td>資料來源實測記錄（22 項測試）</td></tr>
+<tr><td><a href="conflict-review.html">conflict-review.html</a></td><td>架構衝突比對</td></tr>
+<tr><td>PHASE1_CONCLUSIONS</td><td>Phase 1 結論</td></tr>
+</table>
+
+<h3>講義來源</h3>
+<div class="box">
+NotebookLM「財經」筆記本（16 個來源）。本規格書引用的講義原文數字
+（Tier 對應表、ROE 統計、杜邦結構、風險折扣案例、站隊權重、否決過濾）
+皆經重新查證並記錄於 decision-log。
+</div>
+
+</div>
+</body>
+</html>

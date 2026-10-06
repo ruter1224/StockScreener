@@ -26,5 +26,6 @@ data/
 Thumbs.db
 .vscode/
 .idea/
-# Playwright MCP ºI¹Ï¿é¥X
+# Playwright MCP ï¿½Iï¿½Ï¿ï¿½X
 .playwright-mcp/
+_shots/

@@ -439,11 +439,25 @@ TTM ROE（單一年度內四季平均）<b>保留但不參與篩選</b>，作為
 </ol>
 
 <h3>8.5 請求速率</h3>
-<div class="box">
-<b>單執行緒，不使用併發。</b>瓶頸是帳號額度（0.167 requests/秒），非伺服器能力。
-併發只會瞬間燒光額度後吃 402。
+<div class="box warn">
+⚠️ <b>舊 spec 的速率前提已被實測推翻</b>（測試 23.3）：免 token、不加 sleep 連打 60 次，
+<b>60/60 成功，約 5 requests/秒</b>，遠超舊 spec 假設的 0.167 requests/秒（600 次/小時）。
 </div>
-<div class="box ok">設計修正紀錄：先前建議「併發 5～10」是錯的，已收回。</div>
+<table>
+<tr><th>項目</th><th>舊 spec 假設</th><th>實測</th></tr>
+<tr><td>免費額度</td><td>600 次/小時</td><td>未撞到上限</td></tr>
+<tr><td>節流間隔</td><td>每 7.2 秒一次</td><td>可無節流</td></tr>
+<tr><td>全量抓取耗時</td><td>約 1.6 天</td><td>若維持 5/秒 ≈ <b>40 分鐘</b></td></tr>
+</table>
+<div class="box">
+<b>仍不建議併發</b> —— 避免瞬間燒光額度後吃 402。但<b>單執行緒的節流間隔可大幅放寬</b>，
+具體值待實際抓取時觀察 402 觸發點再定。
+</div>
+<div class="box bad">
+⚠️ 設計修正紀錄：舊 spec 曾建議「併發 5~10」後又收回，收回的理由是「瓶頸是帳號額度 0.167/秒」。
+實測顯示無 token 時可跑 5/秒，<b>該理由不成立</b>；但「不建議併發」的結論仍保留，
+理由改為避免瞬間吃 402。
+</div>
 
 <h2 id="s9">9. 設定檔</h2>
 <table>
@@ -528,13 +542,38 @@ TTM ROE（單一年度內四季平均）<b>保留但不參與篩選</b>，作為
 
 <h2 id="s13">13. 已知未解問題</h2>
 <table>
-<tr><th>#</th><th>問題</th><th>影響</th></tr>
-<tr><td>1</td><td><span class="f">TaiwanStockPER</span> 完整資料期間未確認</td><td>PE 提示的歷史長度</td></tr>
-<tr><td>2</td><td>篩選條件全 AND 後剩幾檔未實算</td><td>若剩不到 30 檔需重新設計條件</td></tr>
-<tr><td>3</td><td>官方產業代碼 → 名稱完整字典未取得</td><td>code→name 對照表完整性</td></tr>
-<tr><td>4</td><td>創新板交易限制內容未查證</td><td>輸出時的風險提示文案</td></tr>
-<tr><td>5</td><td>是否需要 token 才能達到 600 次/小時額度</td><td>目前免 token 可用，但額度上限未驗證</td></tr>
+<tr><th>#</th><th>問題</th><th>狀態</th><th>影響</th></tr>
+<tr><td><s>1</s></td><td><span class="f">TaiwanStockPER</span> 完整資料期間</td>
+  <td>✅ <b>已解決：2005-09-02 ～ 2026-10-05，21 年</b></td><td>無</td></tr>
+<tr><td>2</td><td><b>篩選條件全 AND 後剩幾檔未實算</b></td>
+  <td>❌ 待驗證（需階段 2）</td><td><b>可能需重新設計條件</b></td></tr>
+<tr><td>3</td><td>官方產業代碼 → 名稱字典</td>
+  <td>❌ 確認官方 open data <b>拿不到</b></td><td>僅介面顯示</td></tr>
+<tr><td><s>4</s></td><td>創新板交易限制內容</td>
+  <td>✅ <b>已決定：只標註，不寫具體規則</b></td><td>僅介面標註</td></tr>
+<tr><td>5</td><td>token 與額度上限</td>
+  <td>⚠️ <b>部分解決：免 token 實測 5 requests/秒無失敗</b></td>
+  <td>抓取從 1.6 天縮到數十分鐘</td></tr>
 </table>
+
+<h3>13.1 #2 的連帶問題：align_score 目前無資料來源</h3>
+<div class="box bad">
+⚠️ <b>§2 把 <span class="f">align_score &lt; 8.0</span> 列為篩選條件，
+但它依賴的維度 1／3／5 都還沒有客觀資料可算。</b>
+這個條件實際上<b>還沒法實作</b>，v1 應與兩個否決過濾一起列入 §11「不實作」。<br><br>
+→ 實際可用的篩選條件是<b>三個</b>（ROE 多年平均、業外獲利比、財務槓桿），不是四個。
+</div>
+
+<h3>13.2 實測方法（測試 23）</h3>
+<table>
+<tr><th>項目</th><th>做法</th></tr>
+<tr><td>#1</td><td><span class="f">GET .../TaiwanStockPER&amp;data_id=2330&amp;start_date=2000-01-01</span>（<span class="f">start_date</span> 必填）</td></tr>
+<tr><td>#3</td><td>解析兩個官方端點，統計產業欄位的 distinct 值</td></tr>
+<tr><td>#5</td><td>免 token、不加 sleep，連打 60 次不同 <span class="f">data_id</span></td></tr>
+</table>
+<div class="box warn">
+⚠️ 官方 open data 的回應格式與 FinMind <b>不同</b>：直接是 JSON 陣列，沒有 <span class="f">{status, data}</span> 外層。
+</div>
 <div class="box">
 📌 詳細分析見 <a href="open-questions.html">已知未解問題分析</a>（問題點 / 影響層面 / 範圍）
 </div>

@@ -69,33 +69,36 @@
 <p class="sub">2026-10-06 ｜ 規格書 §13 的 5 項未解問題 ｜ 問題點 · 影響層面 · 範圍</p>
 
 <div class="summary">
-<h3>總覽</h3>
+<h3>總覽 <span style="font-weight:400;font-size:13px;color:var(--dim)">（2026-10-06 實測後更新）</span></h3>
 <table>
-<tr><th style="width:34px">#</th><th>問題</th><th style="width:90px">嚴重度</th><th style="width:110px">阻擋什麼</th><th style="width:100px">可解時機</th></tr>
+<tr><th style="width:34px">#</th><th>問題</th><th style="width:90px">嚴重度</th><th style="width:110px">阻擋什麼</th><th style="width:100px">狀態</th></tr>
 <tr>
-  <td>1</td><td><span class="f">TaiwanStockPER</span> 完整資料期間未確認</td>
-  <td><span class="tag t-later">低</span></td><td>不阻擋</td><td>階段 1</td>
+  <td><s>1</s></td><td><span class="f">TaiwanStockPER</span> 完整資料期間</td>
+  <td><span class="tag t-later">已解決</span></td><td>—</td><td>✅ 21 年</td>
 </tr>
 <tr>
   <td>2</td><td><b>篩選全 AND 後剩幾檔未實算</b></td>
-  <td><span class="tag t-hot">高</span></td><td><b>阻擋篩選層</b></td><td>階段 2</td>
+  <td><span class="tag t-hot">高</span></td><td><b>阻擋篩選層</b></td><td>❌ 待階段 2</td>
 </tr>
 <tr>
-  <td>3</td><td>官方產業代碼 → 名稱字典未取得</td>
-  <td><span class="tag t-later">低</span></td><td>不阻擋</td><td>階段 1~4</td>
+  <td>3</td><td>官方產業代碼 → 名稱字典</td>
+  <td><span class="tag t-later">低</span></td><td>不阻擋</td><td>❌ 確認官方無</td>
 </tr>
 <tr>
-  <td>4</td><td>創新板交易限制內容未查證</td>
-  <td><span class="tag t-later">低</span></td><td>不阻擋</td><td>階段 4</td>
+  <td><s>4</s></td><td>創新板交易限制內容</td>
+  <td><span class="tag t-later">已解決</span></td><td>—</td><td>✅ 只標註不寫規則</td>
 </tr>
 <tr>
-  <td>5</td><td><b>token 與額度上限的關係未驗證</b></td>
-  <td><span class="tag t-hot">中</span></td><td>影響抓取耗時估算</td><td>階段 1</td>
+  <td>5</td><td>token 與額度上限的關係</td>
+  <td><span class="tag t-later">已解決</span></td><td>—</td><td>✅ 5 req/秒</td>
 </tr>
 </table>
-<p class="muted" style="margin-bottom:0">
-只有 <b>#2</b> 會讓架構需要重新設計。其餘四項都是「補資料」或「補文案」層級，不影響模組結構。
-</p>
+
+<div class="box ok" style="margin-bottom:0">
+<b>實測後結論：5 項中 3 項已解決（#1／#4／#5），2 項待處理（#2／#3）。</b>
+只有 <b>#2</b> 會讓架構需要重新設計，且需等階段 2 財務指標算完才能驗證。
+<b>沒有任何一項阻擋階段 0（專案骨架）。</b>
+</div>
 </div>
 
 

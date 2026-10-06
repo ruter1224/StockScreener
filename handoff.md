@@ -4,6 +4,7 @@
 
 **抓取程式已完成並測試通過，資料尚未全量抓取。**
 
+- **藍圖**：`agents.md`（階段路線圖、文件分工、陷阱、常用指令）
 - 程式碼：`fetch.py` ＋ `src/core/` ＋ `src/storage/`（**7 個檔案，35 個單元測試全過**）
 - 規格書：`docs/superpowers/specs/2026-10-06-stock-screener-spec.md`（14 節，現行實作依據）
 - 詞彙表：`CONTEXT.md`
@@ -134,6 +135,7 @@ uv run python fetch.py --status                                    # 看進度
 4. 五項未解問題實測（**3 項已解決**：PER 21 年、額度確認、創新板只標註）
 5. 官方文件查證（**發現文件本身有 5 個錯誤**，修正 4 處錯誤歸因）
 6. **抓取程式**（client／sync_state／writer ＋ 35 個測試）
+7. **補建 `agents.md` 專案藍圖**（階段路線圖、文件分工、靜默錯誤陷阱、常用指令）
 
 ## ⚠️ 注意事項
 

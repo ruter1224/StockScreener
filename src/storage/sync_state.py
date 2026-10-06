@@ -59,6 +59,18 @@ class SyncState:
         )
         return {r[0] for r in cur.fetchall()}
 
+    def ok_ids(self, dataset: str) -> set[str]:
+        """只有 status='ok' 的 stock_id。
+
+        與 done_ids 的差別在於 empty 項目**本來就沒有**資料檔，
+        不能拿來跟「檔案遺失」比對（見 fetch.py 的續傳邏輯）。
+        """
+        cur = self.conn.execute(
+            "SELECT stock_id FROM sync_state WHERE dataset = ? AND status = 'ok'",
+            (dataset,),
+        )
+        return {r[0] for r in cur.fetchall()}
+
     def record(
         self,
         dataset: str,

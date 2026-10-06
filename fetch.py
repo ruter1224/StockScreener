@@ -17,9 +17,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
+from typing import Protocol
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
@@ -29,6 +31,7 @@ from core.finmind_client import (  # noqa: E402
     FetchError,
     FinMindClient,
     RateLimiter,
+    Response,
     load_token,
 )
 from storage.sync_state import SyncState  # noqa: E402
@@ -37,6 +40,9 @@ from storage.writer import ParquetWriter  # noqa: E402
 DATA_DIR = Path("data")
 STATE_DB = DATA_DIR / "sync_state.db"
 PARQUET_ROOT = DATA_DIR / "raw"
+# fetch.py 實際使用的股票池。monitor.py 靠它算進度分母，
+# 不用自己重推（本地 parquet 含已下市股，會算出比實際更大的分母）。
+UNIVERSE_JSON = PARQUET_ROOT / "universe.json"
 
 # 實測確認：12 個 dataset 逐檔查詢免費層全部可用（測試 27）
 #
@@ -68,6 +74,21 @@ GLOBAL_DATASETS = [
 START_DATE = "2015-01-01"
 
 
+class Fetcher(Protocol):
+    """抓取函式只依賴 fetch() 介面，不綁死 FinMindClient 整個類別。
+
+    測試要注入 fake（不送真實請求）時才需要這個寬度。
+    """
+
+    def fetch(
+        self,
+        dataset: str,
+        data_id: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> Response: ...
+
+
 def log(msg: str) -> None:
     # Windows 主控台預設 cp950 無法輸出 emoji，中文可但符號不行。
     # 統一降級替換，避免 UnicodeEncodeError 中斷長時間抓取。
@@ -75,10 +96,25 @@ def log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {safe}", flush=True)
 
 
-def build_universe(client: FinMindClient, include_etf: bool) -> tuple[list[str], list[str]]:
-    """從 TaiwanStockInfo 取股票池。
+def latest_by_stock(rows: list[dict]) -> dict[str, dict]:
+    """TaiwanStockInfo 是變更事件流，同一 stock_id 有多列，取 date 最新。"""
+    latest: dict[str, dict] = {}
+    for row in rows:
+        sid = row.get("stock_id")
+        if not sid:
+            continue
+        dt = str(row.get("date") or "")
+        if sid not in latest or dt > str(latest[sid].get("date") or ""):
+            latest[sid] = row
+    return latest
 
-    ⚠️ **ETF 保留在池中**（2026-10-06 使用者決定）。
+
+def classify_universe(
+    latest: dict[str, dict],
+) -> tuple[list[str], list[str]]:
+    """把 TaiwanStockInfo 去重後的結果分成 (全部證券, 財務篩選用股票)。
+
+    ⚠️ **ETF 保留在全部證券中**（2026-10-06 使用者決定）。
     使用者可能要看 ETF 的技術線圖等資料，所以不能從主檔排除。
     但 ETF 沒有財報（FinancialStatements / BalanceSheet / PER /
     MonthRevenue 全回 rows=0），**財務指標計算時要排除**。
@@ -86,23 +122,7 @@ def build_universe(client: FinMindClient, include_etf: bool) -> tuple[list[str],
     排除依據：
     - v1 不啟用興櫃（emerging，官方無資料、無財報）
     - 非 4 碼數字的代號（特別股等，見 test 11.2）
-
-    回傳 (全部證券, 財務篩選用股票) 兩份清單。
     """
-    r = client.fetch("TaiwanStockInfo", start_date="2026-01-01")
-    if not r.ok:
-        raise SystemExit(f"無法取得股票池：{r.kind.value} / {r.msg}")
-
-    # TaiwanStockInfo 是變更事件流，同一 stock_id 有多列，取 date 最新
-    latest: dict[str, dict] = {}
-    for row in r.data:
-        sid = row.get("stock_id")
-        if not sid:
-            continue
-        dt = str(row.get("date") or "")
-        if sid not in latest or dt > str(latest[sid].get("date") or ""):
-            latest[sid] = row
-
     by_type: dict[str, set[str]] = {}
     by_cat: dict[str, set[str]] = {}
     for sid, row in latest.items():
@@ -110,9 +130,7 @@ def build_universe(client: FinMindClient, include_etf: bool) -> tuple[list[str],
         by_cat.setdefault(row.get("industry_category", ""), set()).add(sid)
 
     twse_tpex = by_type.get("twse", set()) | by_type.get("tpex", set())
-    numeric = {s for s in twse_tpex if s.isdigit() and len(s) == 4}
 
-    # 財務篩選用：排除 ETF / 期貨類（有代號字母後綴或類別含 ETF 期貨）
     def has_financials(sid: str, row: dict) -> bool:
         cat = str(row.get("industry_category", ""))
         if "ETF" in cat or "期貨" in cat or "權證" in cat:
@@ -122,23 +140,69 @@ def build_universe(client: FinMindClient, include_etf: bool) -> tuple[list[str],
             return False
         return True
 
-    with_fin = sorted(s for s in numeric if has_financials(s, latest[s]))
-    all_securities = sorted(twse_tpex)
+    with_fin = sorted(
+        s
+        for s in twse_tpex
+        if s.isdigit() and len(s) == 4 and has_financials(s, latest[s])
+    )
+    return sorted(twse_tpex), with_fin
 
-    cats = sorted(by_cat.items(), key=lambda x: -len(x[1]))[:6]
-    log(f"  產業別 top6：{[(c, len(s)) for c, s in cats]}")
+
+def build_universe(client: Fetcher, include_etf: bool) -> tuple[list[str], list[str]]:
+    """從 TaiwanStockInfo 取股票池，並回報規模。
+
+    篩選規則在 classify_universe，monitor.py 也複用同一份，
+    避免兩邊的 ETF 判定各自漂移。
+    """
+    r = client.fetch("TaiwanStockInfo", start_date="2026-01-01")
+    if not r.ok:
+        raise SystemExit(f"無法取得股票池：{r.kind.value} / {r.msg}")
+
+    latest = latest_by_stock(r.data)
+    all_securities, with_fin = classify_universe(latest)
+
+    by_type: dict[str, set[str]] = {}
+    by_cat: dict[str, int] = {}
+    for sid, row in latest.items():
+        by_type.setdefault(row.get("type", ""), set()).add(sid)
+        cat = row.get("industry_category", "")
+        by_cat[cat] = by_cat.get(cat, 0) + 1
+    cats = sorted(by_cat.items(), key=lambda x: -x[1])[:6]
+    log(f"  產業別 top6：{cats}")
     log(f"股票池：twse={len(by_type.get('twse', set()))} "
         f"tpex={len(by_type.get('tpex', set()))} → "
         f"全部證券 {len(all_securities)} 檔（ETF 保留）｜ "
         f"有財報 {len(with_fin)} 檔")
+    save_universe(all_securities, with_fin)
     return all_securities, with_fin
 
 
-def fetch_global(client: FinMindClient, writer: ParquetWriter, state: SyncState) -> None:
+def save_universe(all_securities: list[str], with_fin: list[str]) -> None:
+    """記錄實際使用的股票池，供 monitor.py 當進度分母。
+
+    一定要用當次 API 回應推導的結果，不要用本地 parquet 重推：
+    本地 parquet 是全歷史事件流，含已下市證券，會算出偏大的分母，
+    導致進度條永遠到不了 100%。
+    """
+    UNIVERSE_JSON.write_text(
+        json.dumps(
+            {
+                "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "all_securities": all_securities,
+                "with_financials": with_fin,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def fetch_global(client: Fetcher, writer: ParquetWriter, state: SyncState) -> None:
     """全域型 dataset：一次抓完存成單一檔案。"""
     log("=== 抓取全域型 dataset ===")
     for ds in GLOBAL_DATASETS:
-        if state.done_ids(ds) and "ALL" in state.done_ids(ds):
+        # 續傳以 parquet 實際存在為準。`data/` 若被雲端同步，狀態可能跟檔案分離。
+        if "ALL" in state.done_ids(ds) and writer.exists(ds, "ALL"):
             log(f"  {ds}: 已完成，略過")
             continue
         r = client.fetch(ds, start_date=START_DATE)
@@ -153,7 +217,7 @@ def fetch_global(client: FinMindClient, writer: ParquetWriter, state: SyncState)
 
 
 def fetch_per_stock(
-    client: FinMindClient,
+    client: Fetcher,
     writer: ParquetWriter,
     state: SyncState,
     dataset: str,
@@ -170,16 +234,22 @@ def fetch_per_stock(
     - 額度用盡（402）停止，等下個計費週期
     """
     done = state.done_ids(dataset)
+    # 狀態說完成、但 parquet 不在 → 視為遺失重抓。
+    # 原因：`data/` 被雲端同步時，sync_state.db 與 data/raw/ 會分離，
+    # 只看狀態會靜默跳過（2026-10-06 實際發生過）。
+    lost = {s for s in state.ok_ids(dataset) if not writer.exists(dataset, s)}
     log(f"=== {dataset} ===")
 
     if retry_errors:
         targets = [sid for sid, _ in state.errors(dataset)]
         log(f"  重試失敗項目 {len(targets)} 個")
     else:
-        targets = [s for s in pool if s not in done]
+        targets = [s for s in pool if s not in done or s in lost]
         skipped = len(pool) - len(targets)
         if skipped:
             log(f"  續傳：略過 {skipped} 檔已完成")
+        if lost:
+            log(f"  資料檔遺失重抓 {len(lost)} 檔")
 
     if limit is not None:
         targets = targets[:limit]
@@ -199,8 +269,9 @@ def fetch_per_stock(
             state.finish_run(run_id, i - 1, f"time limit {max_seconds}s")
             return
 
-        # 增量：已有資料則從最新日期之後抓
-        last = state.last_date(dataset, sid)
+        # 增量：已有資料則從最新日期之後抓。
+        # 檔案不在 → last_date 不可信，從頭抓，否則會缺前段資料。
+        last = state.last_date(dataset, sid) if writer.exists(dataset, sid) else None
         start = last if last else START_DATE
 
         try:

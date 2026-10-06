@@ -37,7 +37,8 @@
 
 - 可運行：**抓取器可運行**；財務指標計算、介面尚未開始
 - **抓取掛機中**（2026-10-06 22:04 重啟後的新版排程，DESKTOP-5241OJK）
-  - 收工時進度：`TaiwanStockFinancialStatements` **1597/2037（78.4%）**，error=0
+  - 收工時進度：`TaiwanStockFinancialStatements` **1722/2037（84.5%）**，error=0
+  - 6 個 dataset 尚未開始（財務類剩餘約 315 檔，其餘 6 個接續跑，總計仍以小時計）
   - 進度看儀表板 **<http://127.0.0.1:8765/>**（每 5 秒刷新）或 `uv run python fetch.py --status`
   - 7 個 dataset 全部回 0 才會寫 `logs/ALL_DONE.txt` ＋ 彈通知
   - 本輪 log：`logs/run_all-20261006-2204.log`、`logs/runner.out.log`
@@ -112,7 +113,8 @@ uv run python -m unittest discover tests    # 應 69 passed
 2026-10-06 曾因打字錯誤多建了一個 `Stock Screener(股票籌選)`
 （**籌** U+7C4C），裡面只有一份 `run_all.py` 草稿，
 沒有 `.git`、沒有 `data/`、沒有 `.venv`，**沒有任何需要同步的東西**。
-已確認對抓取與 git 零影響（抓取實際跑在正確目錄），等待使用者手動刪除。
+已確認對抓取與 git 零影響（抓取實際跑在正確目錄），
+**並已於 2026-10-06 由使用者手動刪除**。
 
 **git 追蹤內容，不追蹤資料夾名**，所以兩台電腦的資料夾名不必一致，
 `git clone` / `git pull` 即可。別為了讓兩台一致而去搬動正在跑的目錄。
@@ -211,14 +213,16 @@ uv run python -m unittest discover tests    # 應 69 passed
 
 ## 🕐 最後更新
 
-- 時間：2026-10-06（收工，第三次）
+- 時間：2026-10-06（收工，第四次／最終）
 - 更新者：OpenCode @ **DESKTOP-5241OJK**
 - HEAD：見 `git log -1`
-- Git push：✅ 已推（詳見版本歷史；本次為抓取自癒改造）
+- Git push：✅ 已推，local == origin/master（behind/ahead = 0/0）
 - Chezmoi push：—（無變動，`chezmoi status` 與 `chezmoi git -- status` 皆乾淨）
 - 目標驗證：✅ 69 個單元測試通過（`uv run python -m unittest discover tests` → `Ran 69 tests / OK`）
 - 目標驗證：✅ ruff clean（`uv run ruff check src fetch.py monitor.py run_all.py tests`）
 - 目標驗證：✅ 續傳正確（新 log 顯示「續傳：略過 1547 檔已完成」）
-- 目標驗證：✅ 進度持續增加且 error=0（1563 → 1597/2037，收工前 45 秒內持續前進）
+- 目標驗證：✅ 進度持續增加且 error=0（1563 → 1722/2037，84.5%）
 - 目標驗證：✅ `ALL_DONE.txt` 不存在（閘門未被誤觸）
 - 目標驗證：✅ 背景行程 6 個 PID 全在（run_all / fetch / monitor 各 2 個）
+- 目標驗證：✅ `E:\OpenCode` 下只剩一個專案目錄（誤建的 `股票籌選` 已由使用者刪除）
+- 目標驗證：✅ Obsidian 日期筆記 282 行 + `歷史日誌.md` 976 行，三段收工內容逐行比對無遺失

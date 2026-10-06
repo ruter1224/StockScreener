@@ -217,6 +217,13 @@ uv run python -m unittest discover tests    # 應 69 passed
 判斷手法：比對 `data/sync_state.db` 的修改時間與 `logs/*.log` 的修改時間。
 DB 在更新但 log 沒動 → 管道問題，不是沒在抓。
 
+⚠️ 另一個「看起來矛盾、其實是定義不同」的坑（2026-10-07 實例）：
+`fetch.py` 的 `show_status` 原本只算 `ok`，`monitor.py` 算 `ok+empty+skipped`，
+同一個 dataset 在 log 顯示 2019/2037、在 UI 顯示 2037/2037。
+`empty` 是終態（該檔確實無資料），不計會永遠到不了 100%。
+**權威定義一律以 `done_ids()`（= ok+empty+skipped）為準**，
+兩邊的顯示必須用同一套（已於本次修復，另有測試鎖住）。
+
 ### 看中文 log 會以為亂碼，其實不是
 
 `run_all.py` 已設 `PYTHONIOENCODING=utf-8`、`PYTHONUTF8=1`，log **位元組層級已驗證乾淨**

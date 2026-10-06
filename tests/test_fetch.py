@@ -517,5 +517,57 @@ class TestExitCodes(unittest.TestCase):
         self.assertIn("7/7", buf.getvalue())
 
 
+class TestShowStatus(unittest.TestCase):
+    """show_status 的「完成」定義必須跟 monitor.py、done_ids() 一致。
+
+    ⚠️ 2026-10-07 回歸：show_status 只算 ok，monitor 算 ok+empty+skipped，
+    同一個 dataset 在 log 顯示 2019/2037、在 UI 顯示 2037/2037。
+    empty 是終態（該檔確實無資料），不計會永遠到不了 100%。
+    """
+
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.state = SyncState(root / "t.db")
+
+    def tearDown(self):
+        self.state.close()
+        self.tmp.cleanup()
+
+    def test_done_includes_empty_and_skipped(self):
+        pools = {"financial": 100, "market": 200}
+        for sid in ["a", "b", "c"]:
+            self.state.record("TaiwanStockPER", sid, "ok", rows=1)
+        for sid in ["d", "e"]:
+            self.state.record("TaiwanStockPER", sid, "empty", rows=0)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            fetch.show_status(self.state, pools)
+        line = next(
+            row for row in buf.getvalue().splitlines()
+            if "TaiwanStockPER" in row
+        )
+        # 分子 = 3 ok + 2 empty = 5，分母 = 池大小 100
+        self.assertIn("5/100", line.replace(" ", ""))
+        self.assertIn("5.0%", line)
+
+    def test_matches_done_ids_definition(self):
+        """分子必須等於 done_ids() 的定義：ok + empty + skipped。"""
+        pools = {"financial": 10, "market": 10}
+        self.state.record("TaiwanStockPER", "a", "ok", rows=1)
+        self.state.record("TaiwanStockPER", "b", "empty", rows=0)
+        self.state.record("TaiwanStockPER", "c", "error", error_msg="x")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            fetch.show_status(self.state, pools)
+        line = next(
+            row for row in buf.getvalue().splitlines()
+            if "TaiwanStockPER" in row
+        )
+        # done = 1 ok + 1 empty = 2；error 不算完成
+        self.assertIn("2/10", line.replace(" ", ""))
+        self.assertEqual(len(self.state.done_ids("TaiwanStockPER")), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

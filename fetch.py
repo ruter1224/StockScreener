@@ -392,17 +392,34 @@ def fetch_per_stock(
     return EXIT_PARTIAL if stats["error"] else EXIT_OK
 
 
-def show_status(state: SyncState) -> None:
+def show_status(state: SyncState, pools: dict[str, int] | None = None) -> None:
+    """顯示抓取進度。定義必須與 monitor.py 的 /api/state 完全一致：
+
+    - 分子 done = ok + empty + skipped（empty 是終態：該檔確實無資料，
+      不計會讓完成度永遠到不了 100%）
+    - 分母 = universe 池大小（財務類 / 行情類；全域型 = 1）
+
+    ⚠️ 2026-10-07 回歸：這裡原本只算 ok，monitor 算 ok+empty+skipped，
+    同一個 dataset 在 log 顯示 2019/2037、在 UI 顯示 2037/2037。
+    另一個坑：分母原本用「已記錄數」，抓到一半會顯示 385/385 (100%)。
+    """
     log("=== 抓取進度 ===")
     all_ds = PER_STOCK_DATASETS + GLOBAL_DATASETS
     for ds in all_ds:
         s = state.stats(ds)
         if not s:
             continue
-        total = sum(s.values())
-        ok_n = s.get("ok", 0)
-        pct = ok_n / total * 100 if total else 0
-        log(f"  {ds:40s} {ok_n:5d}/{total:<5d} ({pct:5.1f}%)  {s}")
+        # 與 monitor.py build_snapshot、SyncState.done_ids() 同一定義
+        done = s.get("ok", 0) + s.get("empty", 0) + s.get("skipped", 0)
+        if ds in GLOBAL_DATASETS:
+            total: int | None = 1
+        elif pools is not None:
+            total = pools["financial"] if ds in FINANCIAL_DATASETS else pools["market"]
+        else:
+            # --status 模式沒有股票池，退回已記錄數（完成時兩者相等）
+            total = sum(s.values())
+        pct = done / total * 100 if total else 0
+        log(f"  {ds:40s} {done:5d}/{total:<5d} ({pct:5.1f}%)  {s}")
     log("")
     log(f"Parquet 檔案數：{sum(ParquetWriter(PARQUET_ROOT).count_files(d) for d in all_ds)}")
 
@@ -470,7 +487,13 @@ def main() -> int:
     else:
         code = fetch_global(client, writer, state)
 
-    show_status(state)
+    if not args.global_only:
+        # show_status 的分母要用池大小，才會跟 monitor.py 一致。
+        # （--status 與 --global-only 沒有池資訊，退回已記錄數。）
+        pools = {"financial": len(with_financials), "market": len(all_securities)}
+        show_status(state, pools)
+    else:
+        show_status(state)
     state.close()
     if partial_seen and code == EXIT_OK:
         return EXIT_PARTIAL

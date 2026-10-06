@@ -175,7 +175,7 @@ uv run python monitor.py      # 另開，看進度 UI（:8765）
 | 檔 | 用途 |
 |---|---|
 | `monitor.py` | 進度 UI，<http://127.0.0.1:8765/>，只讀 DB 不干擾抓取 |
-| `run_all.py` | 依序抓 7 個 dataset，可 Ctrl+C 中斷續傳，完成彈通知 |
+| `run_all.py` | 依序抓 7 個 dataset，可 Ctrl+C 中斷續傳；**會依退出碼自動等待重試**，完成彈通知 |
 | `logs/` | 抓取 log（git 忽略）|
 
 掛機指令（DESKTOP-5241OJK，2026-10-06 19:38 起）：
@@ -193,7 +193,8 @@ uv run python monitor.py      # 另開，看進度 UI（:8765）
 3. `run_all.py` 自動接續腳本 ＋ Windows 完成通知
 4. parquet 遺失恢復（含 10 個新測試）
 5. `universe.json` 統一進度分母
-6. 兩個 commit 已推（`f5a488e` 續傳修正、`0e0d038` UI 與腳本）
+6. 退出碼契約 + 自動重試策略（斷線自癒、額度通知、ALL_DONE 閘門），見「安全機制」
+7. 兩個 commit 已推（`f5a488e` 續傳修正、`0e0d038` UI 與腳本）
 
 ## ⚠️ 注意事項
 
@@ -210,7 +211,8 @@ uv run python run_all.py                # 續傳抓取
 
 ### 抓取中不能關機／休眠
 
-斷網會讓抓取失敗（續傳可救回，但該輪會停）。暫停請 `Ctrl+C` 或停行程。
+斷網會讓抓該輪停止（續傳可救回）。**2026-10-06 起 `run_all.py` 會自己等**
+：指數退避後自動續抓並彈通知，不用守著重啟。重啟機仍是例外——背景行程不會自己恢復。
 
 ### Token 不是必需的
 
@@ -246,21 +248,46 @@ uv run python run_all.py                # 續傳抓取
 
 ### 安全機制（已內建，不要移除）
 
-- 4xx 連續 3 次 → **熔斷停止**
-- `403 ip banned` → 立即停止
-- `402` 額度用盡 → 立即停止
-- 5xx／網路錯誤 → 才重試（最多 3 次）
+`fetch.py` 負責「什麼時候該停」，回報退出碼；`run_all.py` 負責「等多久再重試」。
+
+`fetch.py` 端（不可移除）：
+
+- 4xx 連續 3 次 → **熔斷停止**（`EXIT_CIRCUIT = 5`）
+- `403 ip banned` → 立即停止（`EXIT_IP_BAN = 4`）
+- `402` 額度用盡 → 立即停止（`EXIT_QUOTA = 3`），**此檔不記 error**，下次從頭抓
+- 連續 3 檔（`TRANSIENT_ABORT_AFTER`）網路/5xx 失敗 → 判定斷線立即中止（`EXIT_NETWORK = 2`），
+  避免斷網時把幾千檔污染成失敗狀態
+- 抓完但有失敗檔 → `EXIT_PARTIAL = 6`（不是成功，run_all 會補抓）
+
+`run_all.py` 端（`RETRY_POLICY`）：
+
+| 退出碼 | 等待 | 最多重試 |
+|---|---|---|
+| 2 斷線 | 60s 起指數退避，封頂 900s | **無上限**（掛機就等網路回來）|
+| 3 額度用盡 | 3600s | 4 次 |
+| 4 IP 封鎖 | 1860s（官方 30 分 + 1 分）| 3 次 |
+| 6 部分失敗 | 120s | 2 次，用盡則記為不完整、繼續下一個 |
+| 1 致命 / 5 熔斷 | 不重試 | — （5 需人工確認參數，官方明講不要盲重試）|
+
+### ⚠️ ALL_DONE.txt 是上傳雲端的閘門
+
+**只有 7 個 dataset 全部回 0 才寫 `logs/ALL_DONE.txt`**，有任何一個沒完成就改寫
+`logs/PARTIAL-<stamp>.txt` 並彈錯誤通知。
+
+2026-10-06 之前的版本 402/403/熔斷全部 `exit 0` → run_all 誤當成功 → 資料根本沒抓完卻寫了
+`ALL_DONE.txt`，直接戳破「抓完才上傳雲端」的規則。改動這條時務必跑 `tests/test_run_all.py`。
 
 ## 🕐 最後更新
 
-- 時間：2026-10-06（收工，第二次）
+- 時間：2026-10-06（收工，第三次）
 - 更新者：OpenCode @ **DESKTOP-5241OJK**
 - HEAD：見 `git log -1`
-- Git push：✅ 已推（`f5a488e` + `0e0d038`）
+- Git push：✅ 已推
 - Chezmoi push：—（`chezmoi status` 於 2026-10-06 確認乾淨）
-- 目標驗證：✅ 45 個單元測試通過（`uv run python -m unittest discover tests`）
+- 目標驗證：✅ 69 個單元測試通過（`uv run python -m unittest discover tests`）
 - 目標驗證：✅ ruff 全過（`uv run ruff check src fetch.py monitor.py run_all.py tests`）
 - 目標驗證：✅ 儀表板可讀（HTTP 200，12 個 dataset 進度正確，分母與 fetch.py 一致）
 - 目標驗證：✅ 抓取實際進行中（`TaiwanStockFinancialStatements` 持續增加，0 錯誤）
+- ⚠️ **新程式碼要重啟背景行程才生效**（舊行程仍載入舊版 fetch.py/run_all.py）
 - ⚠️ **抓取掛機中，重開機會停**（重啟方式見「掛機行程不會活過重開機」）
-- 目標驗證：⚠️ 舊雲端副本未清理（由使用者決定，見「舊副本狀態」）
+- ⚠️ 舊雲端副本未清理（由使用者決定，見「舊副本狀態」）

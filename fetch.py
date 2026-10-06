@@ -10,7 +10,9 @@
 
 設計要點：
 - 每檔完成即寫 Parquet + commit SQLite，中斷後 rerun 自動續傳
-- 額度用盡（402）自動暫停一小時，不會死掉
+- 退出碼契約：run_all.py 依退出碼決定等待多久再重試（見 EXIT_* 常數）
+- 4xx 熔斷 / 403 封鎖 / 402 額度用盡一律回非 0，**不能當成功**
+  （2026-10-06 之前的版本這些都 exit 0，run_all 會誤寫 ALL_DONE.txt）
 - 支援兩台電腦同時跑不同 dataset（各自獨立的 sync_state）
 """
 
@@ -36,6 +38,27 @@ from core.finmind_client import (  # noqa: E402
 )
 from storage.sync_state import SyncState  # noqa: E402
 from storage.writer import ParquetWriter  # noqa: E402
+
+# --- 退出碼契約（與 run_all.py 共用，改這裡要同步改 run_all） ---
+#
+# run_all.py 的策略：
+#   2 → 等 60 秒起指數退避（封頂 15 分），**沒有重試上限**
+#   3 → 等 60 分鐘後重試（最多 4 次）
+#   4 → 等 31 分鐘後重試（官方 30 分鐘自動解除，最多 3 次）
+#   6 → 等 2 分鐘後重試（最多 2 次），用盡仍失敗則記為不完整、**繼續**下一個
+#   1, 5 → 停止並通知（需人工處理）
+# ⚠️ 這張表與 run_all.py 的 RETRY_POLICY 必須一致，
+# tests/test_run_all.py 會驗證兩邊的退出碼與策略沒有漏網的。
+EXIT_OK = 0
+EXIT_FATAL = 1        # 參數或環境錯誤，重試無用
+EXIT_NETWORK = 2      # 網路中斷或 5xx 連續失敗
+EXIT_QUOTA = 3        # 額度用盡（402）
+EXIT_IP_BAN = 4       # IP 封鎖（403），官方 30 分鐘自動解除
+EXIT_CIRCUIT = 5      # 4xx 熔斷，官方要求人工確認參數、不要盲重試
+EXIT_PARTIAL = 6      # 抓完但有失敗檔，重跑會自動補抓
+
+# 連續幾檔網路/5xx 失敗就判定為「斷線」中止（避免把剩餘股票全標成 error）
+TRANSIENT_ABORT_AFTER = 3
 
 DATA_DIR = Path("data")
 STATE_DB = DATA_DIR / "sync_state.db"
@@ -156,7 +179,15 @@ def build_universe(client: Fetcher, include_etf: bool) -> tuple[list[str], list[
     """
     r = client.fetch("TaiwanStockInfo", start_date="2026-01-01")
     if not r.ok:
-        raise SystemExit(f"無法取得股票池：{r.kind.value} / {r.msg}")
+        log(f"無法取得股票池：{r.kind.value} / {r.msg}")
+        # 退出碼交給 run_all.py 判斷：可恢復的等待重試，不可恢復的停止
+        if r.kind in (FetchError.NETWORK, FetchError.SERVER_ERROR):
+            raise SystemExit(EXIT_NETWORK)
+        if r.kind is FetchError.QUOTA_EXCEEDED:
+            raise SystemExit(EXIT_QUOTA)
+        if r.kind is FetchError.IP_BANNED:
+            raise SystemExit(EXIT_IP_BAN)
+        raise SystemExit(EXIT_FATAL)
 
     latest = latest_by_stock(r.data)
     all_securities, with_fin = classify_universe(latest)
@@ -197,8 +228,8 @@ def save_universe(all_securities: list[str], with_fin: list[str]) -> None:
     )
 
 
-def fetch_global(client: Fetcher, writer: ParquetWriter, state: SyncState) -> None:
-    """全域型 dataset：一次抓完存成單一檔案。"""
+def fetch_global(client: Fetcher, writer: ParquetWriter, state: SyncState) -> int:
+    """全域型 dataset：一次抓完存成單一檔案。回傳退出碼。"""
     log("=== 抓取全域型 dataset ===")
     for ds in GLOBAL_DATASETS:
         # 續傳以 parquet 實際存在為準。`data/` 若被雲端同步，狀態可能跟檔案分離。
@@ -211,9 +242,20 @@ def fetch_global(client: Fetcher, writer: ParquetWriter, state: SyncState) -> No
             last = max((str(x.get("date", "")) for x in r.data), default=None)
             state.record(ds, "ALL", "ok", rows=r.rows, last_date=last)
             log(f"  {ds}: OK {r.rows} 筆")
-        else:
-            state.record(ds, "ALL", "error", error_msg=f"{r.kind.value}: {r.msg}")
-            log(f"  {ds}: 失敗 {r.kind.value} — {r.msg[:70]}")
+            continue
+
+        log(f"  {ds}: 失敗 {r.kind.value} — {r.msg[:70]}")
+        state.record(ds, "ALL", "error", error_msg=f"{r.kind.value}: {r.msg}")
+        # 可恢復的錯誤交給 run_all.py 等待重試；
+        # 不可恢復（4xx 熔斷等）立即中止，不再累積 4xx。
+        if r.kind is FetchError.QUOTA_EXCEEDED:
+            return EXIT_QUOTA
+        if r.kind in (FetchError.NETWORK, FetchError.SERVER_ERROR):
+            return EXIT_NETWORK
+        if r.kind is FetchError.IP_BANNED:
+            return EXIT_IP_BAN
+        return EXIT_FATAL
+    return EXIT_OK
 
 
 def fetch_per_stock(
@@ -225,13 +267,15 @@ def fetch_per_stock(
     limit: int | None,
     retry_errors: bool,
     max_seconds: int | None,
-) -> None:
-    """逐檔抓取。支援續傳、熔斷、時間上限。
+) -> int:
+    """逐檔抓取。支援續傳、熔斷、時間上限。回傳退出碼（見 EXIT_*）。
 
     安全設計（依官方 https://finmind.github.io/BanIPPolicy/）：
     - 4xx 累積 3 次即熔斷停止，避免被列入黑名單
     - IP 被封鎖（403 ip banned）立即停止，不重試
-    - 額度用盡（402）停止，等下個計費週期
+    - 額度用盡（402）回報 EXIT_QUOTA，由 run_all.py 等計費週期重試
+    - 連續 TRANSIENT_ABORT_AFTER 檔網路/5xx 失敗視為斷線，
+      立即中止而非把剩餘股票全標成 error（2026-10-06 之前會這樣污染狀態）
     """
     done = state.done_ids(dataset)
     # 狀態說完成、但 parquet 不在 → 視為遺失重抓。
@@ -256,10 +300,11 @@ def fetch_per_stock(
 
     if not targets:
         log("  無需抓取")
-        return
+        return EXIT_OK
 
     run_id = state.start_run(dataset, len(targets))
     stats = {"ok": 0, "empty": 0, "error": 0}
+    consecutive_transient = 0
     t0 = time.time()
 
     for i, sid in enumerate(targets, 1):
@@ -267,7 +312,7 @@ def fetch_per_stock(
         if max_seconds is not None and (time.time() - t0) > max_seconds:
             log(f"  ⏱ 達到時間上限 {max_seconds}s，已完成 {i - 1}/{len(targets)}")
             state.finish_run(run_id, i - 1, f"time limit {max_seconds}s")
-            return
+            return EXIT_OK
 
         # 增量：已有資料則從最新日期之後抓。
         # 檔案不在 → last_date 不可信，從頭抓，否則會缺前段資料。
@@ -278,19 +323,25 @@ def fetch_per_stock(
             r = client.fetch(dataset, data_id=sid, start_date=start)
         except CircuitOpen as e:
             # 4xx 熔斷：立即停止，不繼續累積 4xx
-            log(f"\n  🔴 熔斷停止：{e}")
+            log(f"\n  [停止] 熔斷停止：{e}")
             log("  已完成的資料都已落盤，修正問題後 rerun 會自動續傳。")
             state.finish_run(run_id, i - 1, "circuit breaker: 4xx")
-            return
+            return EXIT_CIRCUIT
 
         if r.kind is FetchError.IP_BANNED:
             # 官方：IP 被封鎖 30 分鐘自動解除，不要繼續打
-            log("\n  🔴 IP 被封鎖（403 ip banned）")
-            log("  官方政策：30 分鐘自動解除。停止抓取，請 30 分後再執行。")
+            log("\n  [停止] IP 被封鎖（403 ip banned），官方 30 分鐘自動解除。")
             state.finish_run(run_id, i - 1, "ip banned")
-            return
+            return EXIT_IP_BAN
+
+        if r.kind is FetchError.QUOTA_EXCEEDED:
+            # run_all.py 會等待計費週期後自動重跑，此檔未記錄、下次從頭抓
+            log(f"\n  [注意] 額度用盡（{i}/{len(targets)}），回報退出碼 3 等待重試")
+            state.finish_run(run_id, i - 1, "quota exhausted (402)")
+            return EXIT_QUOTA
 
         if r.ok:
+            consecutive_transient = 0
             last_date = max((str(x.get("date", "")) for x in r.data), default=last)
             if r.rows == 0:
                 state.record(dataset, sid, "empty", rows=0, last_date=last)
@@ -299,13 +350,22 @@ def fetch_per_stock(
                 writer.write(dataset, sid, r.data)
                 state.record(dataset, sid, "ok", rows=r.rows, last_date=last_date)
                 stats["ok"] += 1
-        elif r.kind is FetchError.QUOTA_EXCEEDED:
-            log(f"\n  ⚠ 額度用盡（{i}/{len(targets)}）")
-            log("  官方：402 表示額度用盡，等下個計費週期。停止抓取。")
-            state.finish_run(run_id, i - 1, "quota exhausted (402)")
-            return
-        else:
-            state.record(dataset, sid, "error", error_msg=f"{r.kind.value}: {r.msg}")
+            continue
+
+        # 其餘錯誤：記錄後繼續（4xx 由熔斷器把關，連續 3 次會拋 CircuitOpen）
+        state.record(dataset, sid, "error", error_msg=f"{r.kind.value}: {r.msg}")
+        stats["error"] += 1
+        if r.kind in (FetchError.NETWORK, FetchError.SERVER_ERROR):
+            consecutive_transient += 1
+            if consecutive_transient >= TRANSIENT_ABORT_AFTER:
+                # 斷線特徵：連續多檔都連不上。中止而非全標 error，
+                # 否則斷網 10 分鐘會把幾千檔污染成失敗狀態。
+                log(f"\n  [停止] 連續 {consecutive_transient} 檔網路/5xx 失敗，判定斷線")
+                log("  已落盤的資料保留，網路恢復後 rerun 續傳（失敗檔會自動補抓）")
+                state.finish_run(
+                    run_id, i - 1, f"network down after {consecutive_transient} failures"
+                )
+                return EXIT_NETWORK
 
         if i % 25 == 0 or i == len(targets):
             elapsed = time.time() - t0
@@ -318,6 +378,8 @@ def fetch_per_stock(
     log(f"完成：ok={stats['ok']} empty={stats['empty']} error={stats['error']}")
     if stats["error"]:
         log(f"錯誤樣例：{state.errors(dataset)[:3]}")
+    # 有失敗檔就不算完成，讓 run_all.py 等一下重跑補抓
+    return EXIT_PARTIAL if stats["error"] else EXIT_OK
 
 
 def show_status(state: SyncState) -> None:
@@ -335,7 +397,7 @@ def show_status(state: SyncState) -> None:
     log(f"Parquet 檔案數：{sum(ParquetWriter(PARQUET_ROOT).count_files(d) for d in all_ds)}")
 
 
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser(description="FinMind 資料抓取")
     ap.add_argument("--dataset", help="只抓指定 dataset")
     ap.add_argument("--limit", type=int, help="只抓前 N 檔（測試用）")
@@ -364,13 +426,15 @@ def main() -> None:
 
     if args.status:
         show_status(state)
-        return
+        return EXIT_OK
 
     log(f"速率：{args.per_hour} 次/小時 ｜ token {'有' if token else '無（僅查額度需用）'}")
-    log("安全：4xx 連續 3 次熔斷 ｜ 403 ip banned 立即停 ｜ 402 額度用盡立即停")
+    log("安全：4xx 連續 3 次熔斷 ｜ 403 ip banned 立即停 ｜ 402 回報退出碼 3 等待重試")
     if args.max_seconds:
         log(f"時間上限：{args.max_seconds} 秒")
 
+    code = EXIT_OK
+    partial_seen = False
     if not args.global_only:
         all_securities, with_financials = build_universe(client, args.include_etf)
         datasets = [args.dataset] if args.dataset else PER_STOCK_DATASETS
@@ -383,16 +447,25 @@ def main() -> None:
                 if ds in FINANCIAL_DATASETS
                 else all_securities
             )
-            fetch_per_stock(
+            code = fetch_per_stock(
                 client, writer, state, ds, pool,
                 args.limit, args.retry_errors, args.max_seconds,
             )
+            if code not in (EXIT_OK, EXIT_PARTIAL):
+                # 硬停止（斷線/額度/封鎖/熔斷）：不繼續跑下一個 dataset
+                break
+            if code == EXIT_PARTIAL:
+                # 有失敗檔也先跑完其餘 dataset，最後再統一回報 6
+                partial_seen = True
     else:
-        fetch_global(client, writer, state)
+        code = fetch_global(client, writer, state)
 
     show_status(state)
     state.close()
+    if partial_seen and code == EXIT_OK:
+        return EXIT_PARTIAL
+    return code
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

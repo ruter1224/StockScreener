@@ -367,5 +367,112 @@ class TestParquetLossRecovery(unittest.TestCase):
         self.assertEqual(self.client.calls[0]["start_date"], fetch.START_DATE)
 
 
+class _ScriptedClient:
+    """依腳本回傳指定錯誤，用來測退出碼契約。
+
+    腳本用完後一律回 OK，避免測試無限迴圈。
+
+    ⚠️ 掛真的 CircuitBreaker：與 FinMindClient.fetch 的行為一致
+    （見 finmind_client.py 的 self.breaker.record(kind)）。少了這行，
+    連續 4xx 就不會拋 CircuitOpen，熔斷路徑等於沒被測到。
+    """
+
+    def __init__(self, kinds: list[FetchError]):
+        self.kinds = list(kinds)
+        self.calls: list[dict] = []
+        self.breaker = CircuitBreaker()
+
+    def fetch(self, dataset, data_id=None, start_date=None, end_date=None):
+        self.calls.append({"data_id": data_id})
+        if self.kinds:
+            kind = self.kinds.pop(0)
+        else:
+            kind = FetchError.OK
+        # 與真實 client 相同的位置：熔斷檢查在回傳前
+        self.breaker.record(kind)
+        if kind is FetchError.OK:
+            return Response(200, kind, 1, [{"date": "2026-06-30"}], "success")
+        # status_code 依 kind 對應，只要 classify 結果正確即可
+        code = {
+            FetchError.QUOTA_EXCEEDED: 402,
+            FetchError.IP_BANNED: 403,
+            FetchError.NETWORK: 0,
+            FetchError.SERVER_ERROR: 503,
+        }.get(kind, 400)
+        return Response(code, kind, 0, [], kind.value)
+
+
+class TestExitCodes(unittest.TestCase):
+    """退出碼契約：run_all.py 靠它決定等待與重試，改了會兩邊一起壞。
+
+    2026-10-06 之前的版本 402/403/熔斷全部 exit 0，
+    run_all 當成成功 → 最後誤寫 ALL_DONE.txt（資料其實沒抓完）。
+    """
+
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.state = SyncState(root / "t.db")
+        self.writer = ParquetWriter(root / "raw")
+
+    def tearDown(self):
+        self.state.close()
+        self.tmp.cleanup()
+
+    def _run(self, kinds: list[FetchError], pool: list[str]) -> int:
+        client = _ScriptedClient(kinds)
+        return fetch.fetch_per_stock(
+            client, self.writer, self.state, "DS_X", pool, None, False, None
+        )
+
+    def test_all_ok_returns_zero(self):
+        self.assertEqual(self._run([], ["2330", "2317"]), fetch.EXIT_OK)
+
+    def test_quota_returns_exit_3(self):
+        self.assertEqual(self._run([FetchError.QUOTA_EXCEEDED], ["2330"]),
+                         fetch.EXIT_QUOTA)
+
+    def test_ip_banned_returns_exit_4(self):
+        self.assertEqual(self._run([FetchError.IP_BANNED], ["2330"]),
+                         fetch.EXIT_IP_BAN)
+
+    def test_circuit_open_returns_exit_5(self):
+        """連續 4xx 會由熔斷器拋 CircuitOpen，必須回報 5。"""
+        client = _ScriptedClient([FetchError.BAD_PARAMS] * 3)
+        code = fetch.fetch_per_stock(
+            client, self.writer, self.state, "DS_X", ["1", "2", "3"],
+            None, False, None,
+        )
+        self.assertEqual(code, fetch.EXIT_CIRCUIT)
+
+    def test_three_consecutive_network_failures_abort(self):
+        """連續 3 檔斷線就中止，不能把剩餘股票全標成 error。"""
+        code = self._run(
+            [FetchError.NETWORK] * fetch.TRANSIENT_ABORT_AFTER, ["1", "2", "3", "4", "5"]
+        )
+        self.assertEqual(code, fetch.EXIT_NETWORK)
+
+    def test_network_abort_stops_early(self):
+        """中止後不再繼續打 API（斷網時多打只是浪費與污染狀態）。"""
+        client = _ScriptedClient([FetchError.NETWORK] * 3)
+        fetch.fetch_per_stock(
+            client, self.writer, self.state, "DS_X",
+            ["1", "2", "3", "4", "5"], None, False, None,
+        )
+        self.assertEqual(len(client.calls), fetch.TRANSIENT_ABORT_AFTER)
+
+    def test_single_network_failure_does_not_abort(self):
+        """單檔偶發失敗不該中止整批，記 error 後繼續抓下一檔。"""
+        code = self._run([FetchError.NETWORK], ["1", "2"])
+        self.assertEqual(code, fetch.EXIT_PARTIAL)
+        self.assertEqual([sid for sid, _ in self.state.errors("DS_X")], ["1"])
+        self.assertTrue(self.writer.exists("DS_X", "2"))
+
+    def test_partial_errors_returns_exit_6(self):
+        """抓完但有失敗檔 → 回 6，讓 run_all 補抓而不是當成功。"""
+        code = self._run([FetchError.SERVER_ERROR], ["1"])
+        self.assertEqual(code, fetch.EXIT_PARTIAL)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -224,8 +224,8 @@ PowerShell 的 `Set-Content -Encoding UTF8` 會加 BOM，`uv` 讀不了。
 
 - 時間：2026-10-06（收工）
 - 更新者：OpenCode @ LAP2021-T153
-- HEAD：`757c28d`（收工：補記本次踩坑與驗證證據）
-- Git push：✅ 已推（local `757c28d` == origin/master）
+- HEAD：見 `git log -1`（本次為「收工：補上『下一步』章節」）
+- Git push：✅ 已推（收工前 local == origin/master）
 - Chezmoi push：—（無變動）
 - 目標驗證：✅ 35 個單元測試通過（`uv run python -m unittest discover tests`）
 - 目標驗證：✅ ruff 全過（`uv run ruff check src fetch.py tests`）

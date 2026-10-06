@@ -6,7 +6,7 @@
 
 - canonical spec：`docs/superpowers/specs/2026-10-01-finmind-data-pipeline-design.md`（13 節，**部分內容已被推翻，見下**）
 - 決策紀錄：`docs/superpowers/specs/2026-10-05-decision-log.md`（499 行，**實際主文件**）
-- **資料來源實測**：`docs/review/data-source-verification.md`（8 項測試，含實際 API 回應）
+- **資料來源實測**：`docs/review/data-source-verification.md`（21 項測試，含實際 API 回應）
 - **架構衝突比對**：`docs/review/conflict-review.html`（瀏覽器開啟）
 
 已確認的決策（細節與依據在 decision-log）：
@@ -19,8 +19,12 @@
 | 順序 | 門檻先決（D3）→ Phase 0 驗證 → Phase 1 取分布 → 架構 → 骨架 |
 | Token 落地 | 明文 `.env` + `.gitignore`（**2026-10-06 已建立 .gitignore**）|
 | 財務報表 | **已轉單季值**，TTM = 最近 4 季相加，不需相減 |
-| 日線 | TPEx + TWSE 全市場單日端點，10 年約 5,000 requests（0.5 天）|
+| 日線 | **FinMind `TaiwanStockPrice`**（11.7 年免費，取代 TPEx/TWSE）|
 | 估值層 | 安全邊際（5 年願景）與追價安全圈（2 年實際）**兩者並存** |
+| 已還原股價 | **`TaiwanStockDividendResult`** 官方 `reference_price / before_price`（免費）|
+| **營收 CAGR** | **FinMind 季度財報 `Revenue` type**（12 年，加總為年度後計算）|
+| **衝突 1** | ✅ **方案 A**：兩套估值獨立計算並存；安全邊際門檻可設定、預設 50%、不設死硬門檻 |
+| **衝突 2** | ✅ **ROE 門檻由使用者在一開始設定**，帶入篩選系統；其他三門檻**維持講義值**（業外獲利比 [0.8,1.2]／財務槓桿 <3.0／align_score <8.0），欄位可覆寫 |
 
 ## 🚦 目前狀態
 
@@ -29,13 +33,22 @@
 - 資料：尚未下載任何資料（實測僅取少量樣本驗證 schema）
 - Git：`master` 分支，已推 `origin/master`（GitHub 私有）
 - Obsidian：`OpenCode專區/StockScreener/2026-10-06.md`
+- **資料來源實測**：21 項測試完成，**資料面零阻塞**（測試 20-21 確認月營收端點不可用，但 FinMind 季度財報完全足夠）
 
 ## ➡️ 下一步
 
-1. **驗證月營收 `t187ap05_L` 歷史深度** —— 決定營收 CAGR 能算幾年
-2. **實測免費額度** —— 600 requests/小時的實際限制，影響全量同步排程
-3. 定案衝突 1 的甲乙丙（模式如何分派），以及安全邊際門檻值
-4. 之後才建專案骨架與抓取層
+1. ~~**定案衝突 1 的甲乙丙（模式如何分派），以及安全邊際門檻值**~~ ✅ **已決定：方案 A（兩套獨立計算並存），安全邊際門檻可設定、預設 50%、不設死硬門檻**
+2. ~~**ROE 門檻來源**~~ ✅ **已決定：由使用者在一開始設定，再帶入篩選系統**
+3. ~~**定案其他三個門檻**~~ ✅ **已決定：維持講義值**（業外獲利比 [0.8,1.2]／財務槓桿 <3.0／align_score <8.0），欄位設計為可覆寫
+4. **建專案骨架與抓取層** ← **目前位置**
+5. 之後 Phase 0：驗證財務資料實際欄位
+
+## ✅ 已完成（10-06）
+
+1. ~~**驗證月營收 `t187ap05_L` 歷史深度**~~ ✅ 測試 20-21：端點無歷史，但 FinMind 季度財報 `Revenue` type 涵蓋 12 年，完全足夠計算年度營收 CAGR
+2. ~~**實測免費額度**~~ ✅ 測試 21：20 次連續請求無 rate limit，實際限制比預期寬鬆
+3. ~~**定案衝突 1**~~ ✅ 方案 A（兩套獨立計算並存）＋ 安全邊際門檻預設 50%
+4. ~~**定案衝突 2**~~ ✅ ROE 門檻由使用者設定；其他三門檻維持講義值
 
 ## ⚠️ 注意事項
 
@@ -68,11 +81,15 @@
 `TaiwanStockFinancialStatements` 的 `TotalAssets`／`TotalEquity`／`Liabilities` 皆 **0 筆**，
 必須另抓 `TaiwanStockBalanceSheet`。
 
-### spec §4.3 的 token pre-flight 端點失效
+### spec §4.3 的 token pre-flight 端點已實測（2026-10-06，測試 21.3）
 
-`api.finmindtrade.com/api/v4/user_info` 實測 **404**，
-spec 記載的 `api.web.finmindtrade.com/v2/user_info` 需重測。
-這代表「同步前檢查 token」的保護機制目前不可靠。
+| 端點 | 結果 |
+|---|---|
+| `api.finmindtrade.com/api/v4/user_info` | **404**，不存在 |
+| `api.web.finmindtrade.com/v2/user_info`（spec 記載的） | **200**，但回 `{"msg":"請輸入 token","status":400}` |
+
+→ 兩個端點都**無法在無 token 下查詢額度**。「同步前檢查 token」的保護機制不可靠，
+spec §4.3 的 pre-flight 步驟需改寫（實測見 `data-source-verification.md` 測試 21.3）。
 
 ### MOPS 直連不可用
 
@@ -103,7 +120,8 @@ FinMind 提供的即 MOPS 相同資料，走 FinMind 即可。
 
 ## 🕐 最後更新
 
-- 時間：2026-10-06
+- 時間：2026-10-06（第三次更新）
 - 更新者：OpenCode @ LAP2021-T153
-- Git push：見「Git push」補記（commit `0447415`）
+- HEAD：`e4881b8`（新增 Phase 1 結論總結文件）
+- Git 狀態：**4 個檔案已修改未 commit** — `handoff.md`、`docs/review/conflict-review.html`、`docs/review/data-source-verification.md`、`docs/superpowers/specs/2026-10-05-decision-log.md`
 - Chezmoi push：✅ 無待推變動（`chezmoi status` 乾淨）

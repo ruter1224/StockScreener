@@ -2,106 +2,99 @@
 
 ## ⏯️ 目前做到哪
 
-設計階段全部定稿，**尚未寫任何程式碼**。
+設計階段。**仍未寫任何程式碼**，但 10-06 已完成資料來源實測與架構衝突釐清。
 
-- 完整設計文件：`docs/superpowers/specs/2026-10-01-finmind-data-pipeline-design.md`（13 節，canonical）
-- repo 狀態：master 分支、2 個 commit，remote `origin` = `ruter1224/StockScreener`（GitHub 私有）
+- canonical spec：`docs/superpowers/specs/2026-10-01-finmind-data-pipeline-design.md`（13 節，**部分內容已被推翻，見下**）
+- 決策紀錄：`docs/superpowers/specs/2026-10-05-decision-log.md`（499 行，**實際主文件**）
+- **資料來源實測**：`docs/review/data-source-verification.md`（8 項測試，含實際 API 回應）
+- **架構衝突比對**：`docs/review/conflict-review.html`（瀏覽器開啟）
 
-已確認的決策（細節與依據在 spec）：
+已確認的決策（細節與依據在 decision-log）：
 
 | 項目 | 決策 |
 |---|---|
-| 定位 | 自用／內部研究 |
-| 資料來源 | REST API（`api.finmindtrade.com/api/v4`）+ Python SDK |
+| 定位 | **研究輔助系統**（非全自動篩選器，10-05 推翻原定位）|
+| 資料來源 | FinMind REST API（免 token 即可用）＋ TWSE/TPEx 官方 open data |
 | 技術棧 | Python + DuckDB + Streamlit，依賴用 `uv` |
-| 順序 | 骨架 → 探勘 → 抓取層 → 掛機全量 → 介面 |
-| Token 落地 | 明文 `.env` + `.gitignore` |
-| 請求速率 | 單執行緒，每 7.2 秒一次（500/時） |
-| raw 層 | Parquet 分區，DuckDB 僅 `read_only` 查詢 |
+| 順序 | 門檻先決（D3）→ Phase 0 驗證 → Phase 1 取分布 → 架構 → 骨架 |
+| Token 落地 | 明文 `.env` + `.gitignore`（**2026-10-06 已建立 .gitignore**）|
+| 財務報表 | **已轉單季值**，TTM = 最近 4 季相加，不需相減 |
+| 日線 | TPEx + TWSE 全市場單日端點，10 年約 5,000 requests（0.5 天）|
+| 估值層 | 安全邊際（5 年願景）與追價安全圈（2 年實際）**兩者並存** |
 
 ## 🚦 目前狀態
 
 - 可運行：**否**，專案還沒有可執行的程式
 - 介面：未開始
-- 資料：尚未下載任何資料
-- Git：**2 個 commit（`4eeef80`），已推上 `origin/master`，兩台電腦可同步**
+- 資料：尚未下載任何資料（實測僅取少量樣本驗證 schema）
+- Git：`master` 分支，已推 `origin/master`（GitHub 私有）
+- Obsidian：`OpenCode專區/StockScreener/2026-10-06.md`
 
 ## ➡️ 下一步
 
-1. **建專案骨架 + `.gitignore`**（`.env` 必須在第一個 commit 之前擋下，repo 目前還很乾淨，這是唯一時機）
-2. **填入 token** 到 `.env`，然後跑 `/user_info` 驗證有效性
-3. **階段 1 探勘** 10～20 分鐘，實測 12 個核心資料集 schema，產出 `docs/datasets-schema.md`
-4. 寫抓取層，啟動首次全量同步（免費額度約需 1.6 天）
-
-使用者預計 2026-10-01 晚間執行。篩選文件會在實作前提供。
+1. **驗證三個靜默錯誤項目**（寫程式前必須做，錯了不會報錯）：
+   - `EPS` 欄位是否也轉單季（`origin_name` = 基本每股盈餘）
+   - `NetIncome` vs `IncomeAfterTaxes` 差異（中文名幾乎相同，影響 D8 分子）
+   - `TaiwanStockBalanceSheet` 的 `_per` 後綴意義（`CapitalStock` 與 `CapitalStock_per` 中文同名）
+2. **決定已還原股價的解法**（🔴 阻塞）：買 FinMind Backer／換網路用 yfinance／改設計不用報酬率類指標
+3. 定案衝突 1 的甲乙丙（模式如何分派），以及安全邊際門檻門檻值
+4. 之後才建專案骨架與抓取層
 
 ## ⚠️ 注意事項
 
-### Token 期限
+### 🔴 已還原股價：目前無任何免費路徑
 
-免費 token **有效期 7 天**（使用者實際觀察，官方文件未載明）。
+長區間（>1 年）報酬率需 Adj Close。三條路都已實測排除其他可能：
+- yfinance／Yahoo：**本機網路層被擋**（DNS 解析到 180.222.109.251，TCP 不通；同時 TWSE 通）
+- 自行用除權息還原：TWSE `TWT48U` **忽略 `stockNo` 參數**且只給「預告表」非歷史，官方無歷史除權息端點
+- FinMind `TaiwanStockPriceAdj`：需 Backer 付費
 
-架構後果：token 有兩個消費者，壽命需求不同 ——
-- Streamlit 介面（人在瀏覽器）
-- 下載器／排程同步（掛機 1.6 天，人不在）
+### 兩個靜默錯誤陷阱（已記入實測記錄）
 
-所以 **token 必須落地到檔案**，只存 session state 會讓排程同步完全不可用。
+1. 損益表 `EquityAttributableToOwnersOfParent` 是「**淨利**歸屬母公司」，**不是權益**
+2. BalanceSheet 有 `_per` 後綴變體（`CapitalStock` 與 `CapitalStock_per` 中文同名），需確認否則重複計數
 
-### 安全：真正的破口是 git，不是磁碟
+### 資產／權益不在損益 dataset 內
 
-FinMind 隱私權政策第 10 條對用戶的唯一要求是「妥善保管存取憑證，避免外洩」，**未要求磁碟加密**。因此採明文 `.env`。
+`TaiwanStockFinancialStatements` 的 `TotalAssets`／`TotalEquity`／`Liabilities` 皆 **0 筆**，
+必須另抓 `TaiwanStockBalanceSheet`。
 
-但這個 repo 會進 git、且預期跨電腦共用，所以：
-- `.env` 進 `.gitignore`，第一版就要
-- token 只走 `Authorization` header，**絕不放在 query string**
-- log 只印 token 前 4 碼
-- token 不寫入 Obsidian／`handoff.md`／commit message／錯誤訊息
+### spec §4.3 的 token pre-flight 端點失效
 
-### 重試策略必須分級（IP 封鎖風險）
+`api.finmindtrade.com/api/v4/user_info` 實測 **404**，
+spec 記載的 `api.web.finmindtrade.com/v2/user_info` 需重測。
+這代表「同步前檢查 token」的保護機制目前不可靠。
 
-免費 token 7 天期限直接對應官方 IP 封鎖政策 —— 觸發封鎖原因第一位就是「爬蟲腳本使用過期或錯誤的 token 持續重送」，封鎖 **30 分鐘**。
+### MOPS 直連不可用
 
-```
-4xx                              → 不重試，立即停該 dataset
-402（額度用完）                   → 非錯誤，停止並記錄
-5xx                              → exponential backoff，最多 3 次
-403 + {"msg":"ip banned"}        → 全域停止，標記 30 分鐘後解除
-```
+封鎖頁「因為安全性考量」，GET／POST 加 cookie 均無效。
+FinMind 提供的即 MOPS 相同資料，走 FinMind 即可。
 
-### 維護時段
+### opendata 代號不可憑字面推論
 
-**每週日凌晨 00:00～03:00 伺服器維護，服務暫停。** 1.6 天掛機必然經過，要能自動暫停並續跑。
+`openapi.twse.com.tw/v1/opendata/t187ap05_L` 名稱像除權息，**實際是月營收**
+（含當月／去年同月營收＋產業別）。已列入維度 2 的可用來源。
 
-### 同步前檢查 token
+### 方法教訓
 
-`GET https://api.web.finmindtrade.com/v2/user_info`
-→ `{"user_count": ..., "api_request_limit": ...}`
-
-同步開始前先打這支做 pre-flight 檢查，並可顯示額度條。抓取中每 100 requests 再驗一次，失效就停機寫水位線，換 token 後續跑。
-
-### 未還原價的限制（已知取捨）
-
-免費方案拿不到 `TaiwanStockPriceAdj`，算長區間（>1 年）報酬率會因除權息跳空失真。介面必須明確標示。若篩選重度依賴長區間報酬率，需提早買 Backer。
+- **一次一個測試並記錄**，不要把多檔塞一個 script，失敗時無法定位
+- Windows 主控台無法正確顯示 UTF-8 中文，腳本改用「寫檔＋讀檔」輸出
+- `TaiwanStockInfo` 是**變更事件流**不是主檔（4,329 列／300+ 個 date），需 upsert
 
 ### 已收回的錯誤建議
 
-先前建議「併發 5～10」是錯的，已收回。官方壓力測試顯示伺服器可承受 10～50 requests/秒，但瓶頸是帳度額度（0.167/秒），併發只會瞬間燒光當小時額度後吃 402。
+- 先前建議「併發 5～10」是錯的。瓶頸是帳度額度（0.167/秒），併發只會瞬間燒光當小時額度後吃 402
+- 「安全邊際公式概念有誤」這句我講錯了已收回：公式本身是預期報酬率計算，邏輯通。
+  真正的問題是**同一個 100% 在 5 年與 2 年模式年化意義不同**（約 14.9% vs 41.4%），
+  兩個數字不能放同一把尺讀
 
-## ⚠️ 本機 Chezmoi 待處理（與本專案無關，但影響另一台電腦）
+## ⚠️ 本機 Chezmoi 待處理
 
-`chezmoi status` 顯示約 50 個 skill 檔案為 `DA` 狀態（`My-SpecSkill`、`gstack/*`、`vercel-react-best-practices`）。含義是：**本機實體檔案仍存在，但 chezmoi 認為它們應該被刪除。**
-
-這是「技能精簡計畫」的未完成收尾。需要在本機跑 `chezmoi apply` 才會真正刪除，本地實體檔案才會消失。
-
-本次收工**未執行** `chezmoi apply`（會刪除設定檔，非本次任務範圍，且需另行確認）。
-
-> **2026-10-02 補充**：本節描述的 `DA` 待 apply 狀況已解除 —— 當天在 `DESKTOP-5241OJK` 實跑 `chezmoi status` 結果為乾淨（無待處理變動）。本節保留作為歷史紀錄。
->
-> 本 repo 的 git remote 已於 2026-10-02 補上，見文末「最後更新」。
+`chezmoi status` 已於 2026-10-06 確認乾淨，無待處理變動。
 
 ## 🕐 最後更新
 
-- 時間：2026-10-05
+- 時間：2026-10-06
 - 更新者：OpenCode @ LAP2021-T153
-- Git push：✅ 已推（`origin/master` = `40342e1`，`https://github.com/ruter1224/StockScreener`，PRIVATE）
+- Git push：見「Git push」補記（commit `0447415`）
 - Chezmoi push：✅ 無待推變動（`chezmoi status` 乾淨）

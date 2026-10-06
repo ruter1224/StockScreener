@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>已還原股價問題｜Stock Screener</title>
+<style>
+:root{
+  --bg:#0f1115; --card:#171a21; --line:#2a2f3a;
+  --txt:#e6e8ee; --dim:#9aa3b2;
+  --accent:#6ea8fe; --warn:#f5a524; --bad:#ef6461; --ok:#4ec9a0; --purple:#b48ead;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--txt);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  line-height:1.75;font-size:15px;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:48px 24px 96px}
+h1{font-size:28px;margin:0 0 8px;font-weight:700;letter-spacing:.5px}
+.sub{color:var(--dim);font-size:14px;margin-bottom:8px}
+h2{font-size:19px;margin:44px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line);font-weight:600}
+h3{font-size:15px;margin:22px 0 10px;color:var(--accent);font-weight:600}
+code{font-family:"JetBrains Mono",Consolas,monospace;font-size:13px;
+  background:#1e232c;padding:2px 6px;border-radius:4px;color:#c8d3e8}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin:16px 0}
+.tag{display:inline-block;padding:2px 9px;border-radius:4px;font-size:12px;font-weight:600;
+  margin-right:6px;vertical-align:middle}
+.t-bad{background:rgba(239,100,97,.15);color:var(--bad);border:1px solid rgba(239,100,97,.35)}
+.t-ok{background:rgba(78,201,160,.15);color:var(--ok);border:1px solid rgba(78,201,160,.35)}
+.t-warn{background:rgba(245,165,36,.15);color:var(--warn);border:1px solid rgba(245,165,36,.35)}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+th,td{padding:9px 11px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--dim);font-weight:600;font-size:12.5px;background:#1a1e26}
+td.mono{font-family:"JetBrains Mono",Consolas,monospace;font-size:12px;color:#c8d3e8}
+.big{font-size:15.5px}
+.note{background:rgba(110,168,254,.07);border-left:3px solid var(--accent);
+  padding:12px 16px;margin:14px 0;border-radius:0 6px 6px 0;color:#cdd6e6}
+.danger{background:rgba(239,100,97,.07);border-left:3px solid var(--bad);
+  padding:12px 16px;margin:14px 0;border-radius:0 6px 6px 0}
+ul,ol{margin:8px 0;padding-left:24px}
+li{margin:5px 0}
+pre{background:#11141a;border:1px solid var(--line);border-radius:7px;padding:13px 15px;
+  overflow-x:auto;font-family:"JetBrains Mono",Consolas,monospace;font-size:12px;
+  color:#c8d3e8;line-height:1.6}
+.choice{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:18px 20px;margin:14px 0;border-left:3px solid var(--accent)}
+.choice h3{margin-top:0;color:var(--txt)}
+.choice.c2{border-left-color:var(--purple)}
+.choice.c3{border-left-color:var(--warn)}
+.pill{display:inline-block;background:#1d3557;color:#8ab4f8;padding:2px 10px;
+  border-radius:12px;font-size:11.5px;font-weight:600;margin-right:6px}
+.flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0;
+  font-family:"JetBrains Mono",Consolas,monospace;font-size:12.5px}
+.step{background:#1e232c;border:1px solid var(--line);border-radius:7px;padding:9px 13px}
+.arrow{color:var(--dim)}
+.x{color:var(--bad);font-weight:700}
+.v{color:var(--ok);font-weight:700}
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
+  color:var(--dim);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🔴 唯一還卡住的問題：已還原股價</h1>
+<div class="sub">Stock Screener ｜ 2026-10-06 ｜ 資料來源驗證完成後的結論</div>
+
+<div class="note">
+<b>先講結論：</b>其他 14 項資料來源問題全部解決了（財務 11 年、日線 11.7 年、欄位對齊都確認了）。
+現在只剩<b>這一個</b>問題需要你決定：長區間報酬率要不要用<b>還原後的股價</b>。
+三條免費路徑已全部實測走不通，這是<b>資料來源的限制</b>，不是程式問題。
+</div>
+
+<h2>1. 為什麼需要「還原股價」？</h2>
+
+<p class="big">股票<b>除權（配息）當天</b>，股價會直接跳空下跌，但那不是股價變便宜了，是把價值以股利發給你。</p>
+
+<p>用<b>未還原</b>的股價算報酬率，會把這筆跳空誤認成「股價大跌」：</p>
+
+<div class="card">
+<div class="flow">
+<div class="step">3/1 收盤 <b>100 元</b></div><span class="arrow">→</span>
+<div class="step">配息 5 元<br><span style="color:var(--dim)">除權息</span></div><span class="arrow">→</span>
+<div class="step">3/2 收盤 <b style="color:var(--bad)">95 元</b></div>
+</div>
+<p style="margin-bottom:0">實際上你手上有 100 元股票 <b>+</b> 5 元現金，總值 105 元，<b>完全沒賺也沒賠</b>。<br>
+但用未還原價算出來是 <span class="x">−5%</span> —— <b>假的跌幅</b>。</p>
+</div>
+
+<p>短區間（幾天、幾週）影響小，<b>長區間（1 年以上）會嚴重扭曲</b>。台股每年 3～4 次除權息，
+10 年累積下來會讓報酬率完全失真。</p>
+
+<table>
+<tr><th>用途</th><th>需要還原價嗎</th><th>影響程度</th></tr>
+<tr><td>昨天買、今天賣（幾天）</td><td class="v">不需要</td><td>影響極小</td></tr>
+<tr><td>季營收觀察（幾個月）</td><td>不太需要</td><td>影響小</td></tr>
+<tr><td><b>1～10 年報酬率</b></td><td class="x">必須要</td><td><b>不做就是錯的數字</b></td></tr>
+<tr><td>股價通道（歷史高低點）</td><td class="x">必須要</td><td><b>除權息日會出現假跳空</b></td></tr>
+</table>
+
+<h2>2. 實測結果：三條免費路都斷了</h2>
+
+<p class="big">我逐一呼叫 API 驗證，不是查文件。以下都是實際回應。</p>
+
+<table>
+<tr><th>嘗試的路</th><th>狀態</th><th>實際發生什麼事</th></tr>
+<tr>
+  <td><b>FinMind 已還原價</b><br><code>TaiwanStockPriceAdj</code></td>
+  <td><span class="tag t-bad">❌ 需付費</span></td>
+  <td class="mono">HTTP 400<br>"Your level is free. Please update your user level."</td>
+</tr>
+<tr>
+  <td><b>Yahoo / yfinance</b><br><code>Adj Close</code></td>
+  <td><span class="tag t-bad">❌ 網路被擋</span></td>
+  <td class="mono">Cookie/crumb fetch failed (Timeout)<br>query1.finance.yahoo.com:443 → 不通<br>但 openapi.twse.com.tw:443 → 通</td>
+</tr>
+<tr>
+  <td><b>自己用除權息還原</b><br><code>TWSE TWT48U</code></td>
+  <td><span class="tag t-bad">❌ 官方無資料</span></td>
+  <td class="mono">回 62 筆，但忽略 stockNo 參數<br>（傳 2330 還是回全市場）<br>而且是「待公告預告表」不是歷史</td>
+</tr>
+</table>
+
+<div class="danger">
+<b>為什麼第三條也不行？</b><br>
+還原價公式需要「<b>除權息基準價</b>」：<code>還原後價 = 收盤價 − 每股現金股利</code>。<br>
+我找到 FinMind 的 <code>TaiwanStockDividend</code>，它確實有「每股股利 7.0 元」和「除息日 2026-09-16」，
+<b>但沒有基準價這個欄位</b>。而官方唯一相關的 <code>TaiwanStockCapitalReductionReferencePrice</code>
+（減資參考價）<b>實測回空資料</b>。<br><br>
+順帶一提，那份股利資料 <b>2015～2018 每年只有 1 筆</b>，就算有基準價也不完整。
+</div>
+
+<h2>3. 那怎麼辦？三個選項</h2>
+
+<div class="choice">
+<h3><span class="pill">選項 A</span>買 FinMind Backer</h3>
+<p>一次付費，同時解鎖 <code>TaiwanStockPriceAdj</code>、<code>MonthPrice</code>、<code>WeekPrice</code>、<code>PriceLimit</code>。
+所有功能都能做，程式不用改。</p>
+<p style="color:var(--dim);margin-bottom:0"><b>代價</b>：要花錢，且資料依賴單一付費來源。</p>
+</div>
+
+<div class="choice c2">
+<h3><span class="pill">選項 B</span>換網路環境，用 Yahoo</h3>
+<p>目前是<b>這台電腦</b>的網路被 Yahoo 擋住（DNS 解析到 180.222.109.251，但 TCP 連不上）。
+換網路或掛 VPN／proxy 就可能通。Yahoo 的 Adj Close 是免費的。</p>
+<p style="color:var(--dim);margin-bottom:0"><b>代價</b>：要動網路設定；且 Yahoo 是境外站台，不確定長期穩定。
+<b>我無法驗證這條路是否真的可行</b>——需要在有網路的環境實測。</p>
+</div>
+
+<div class="choice c3">
+<h3><span class="pill">選項 C</span>改設計，不用報酬率類指標 <span class="tag t-warn">我建議這個</span></h3>
+<p>篩選區間只用「<b>財務體質類</b>」指標：ROE、毛利率、負債比、營收成長率、連續幾年賺錢。
+<b>這些完全不需要股價，自然就不需要還原價。</b></p>
+<p>你的核心目標是「<b>找便宜</b>」，便宜可以用 <code>PE 分位</code> 判斷——
+PE 分位基於<b>獲利與股價</b>，同樣受影響。但可以用「<b>當下 PE vs 歷史 PE 分位</b>」
+搭配財務體質來替代純報酬率。</p>
+<p style="margin-bottom:0"><b>連帶影響</b>：
+<ul style="margin-bottom:0">
+<li>❌ 長區間報酬率指標不能用（1 年、3 年、5 年報酬率）</li>
+<li>❌ 股價通道（歷史高低价位）不能畫</li>
+<li>⚠️ 追價安全圈的「天花板上移」判斷要改用 PE 分位</li>
+<li>✅ <b>財務體質、杜邦分析、營收 CAGR、安全邊際（5 年願景）全部照做</b></li>
+</ul></p>
+</div>
+
+<h2>4. 我的建議</h2>
+
+<div class="card">
+<p><b>選 C（改設計）。</b>理由：</p>
+<ol>
+<li>你最初的核心目標是<b>找便宜</b>、看<b>財務體質</b>——這些本來就不依賴報酬率</li>
+<li>A 和 B 都是為了讓一類你可能用得不多、但技術上最難的指標勉強能用</li>
+<li>放棄報酬率類指標<b>不用付錢、不用改網路、不用擔心資料源掛掉</b></li>
+</ol>
+<p style="margin-bottom:0"><b>但這是你的取捨，我不替你決定。</b>如果你確實想要看「這檔股票 5 年賺了幾 %」，
+那就得走 A 或 B。</p>
+</div>
+
+<h2>5. 目前狀態</h2>
+
+<table>
+<tr><th>項目</th><th>狀態</th></tr>
+<tr><td>財務報表（11 年）</td><td><span class="tag t-ok">✅ 完成</span> 單季值，四季可加總</td></tr>
+<tr><td>資產負債表</td><td><span class="tag t-ok">✅ 完成</span> 已確認欄位對應</td></tr>
+<tr><td>日線（11.7 年 OHLC）</td><td><span class="tag t-ok">✅ 完成</span> 全市場約 3～4 小時抓完</td></tr>
+<tr><td>交易日曆</td><td><span class="tag t-ok">✅ 完成</span> 官方提供 6,936 筆</td></tr>
+<tr><td>欄位對應與靜默錯誤</td><td><span class="tag t-ok">✅ 完成</span> 3 項全部驗證</td></tr>
+<tr><td><b>已還原股價</b></td><td><span class="tag t-bad">🔴 需你決定</span></td></tr>
+</table>
+
+<footer>
+完整實測記錄：<code>docs/review/data-source-verification.md</code>（514 行，15 項測試）<br>
+決策紀錄：<code>docs/superpowers/specs/2026-10-05-decision-log.md</code><br><br>
+本頁所有數字都來自實際 API 呼叫，非文件查閱。
+</footer>
+
+</div>
+</body>
+</html>

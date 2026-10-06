@@ -2,12 +2,13 @@
 
 ## ⏯️ 目前做到哪
 
-設計階段。**仍未寫任何程式碼**，但 10-06 已完成資料來源實測與架構衝突釐清。
+設計階段已完成，**規格書已定稿**。仍未寫任何程式碼。
 
-- canonical spec：`docs/superpowers/specs/2026-10-01-finmind-data-pipeline-design.md`（13 節，**部分內容已被推翻，見下**）
-- 決策紀錄：`docs/superpowers/specs/2026-10-05-decision-log.md`（499 行，**實際主文件**）
-- **資料來源實測**：`docs/review/data-source-verification.md`（21 項測試，含實際 API 回應）
-- **架構衝突比對**：`docs/review/conflict-review.html`（瀏覽器開啟）
+- **規格書**：`docs/superpowers/specs/2026-10-06-stock-screener-spec.md`（14 節，**現行實作依據**）
+- **詞彙表**：`CONTEXT.md`（領域術語定義）
+- 決策紀錄：`docs/superpowers/specs/2026-10-05-decision-log.md`（決策理由與查證過程）
+- **資料來源實測**：`docs/review/data-source-verification.md`（22 項測試）
+- 舊 spec `2026-10-01-finmind-data-pipeline-design.md` 已標記 superseded
 
 已確認的決策（細節與依據在 decision-log）：
 
@@ -53,7 +54,9 @@
 3. ~~**定案其他三個門檻**~~ ✅ **已決定：維持講義值**（業外獲利比 [0.8,1.2]／財務槓桿 <3.0／align_score <8.0），欄位設計為可覆寫
 4. ~~**grill 設計（8 題）**~~ ✅ 產品契約、五維評分不可砍、略過篩選入口、ROE 多年平均、PE 只提示、維度 2 CAGR 對照表、安全圈 EPS 全手動、長期價值 CAGR 獨立
 5. ~~**§6 待決清單全數關閉**~~ ✅ 原 #12／#14／#15／#23／#24／#25 皆已定案
-6. **建專案骨架**：`config/boards.yaml`、`config/thresholds.yaml`、`config/industry_cagr.csv`、抓取層 ← **目前位置**
+6. ~~**產生規格書**~~ ✅ `2026-10-06-stock-screener-spec.md`（14 節）＋ `CONTEXT.md` 詞彙表
+7. **階段 0：專案骨架** ← **目前位置**
+   `pyproject.toml` / `.python-version` / `.gitignore` / `start.bat` ＋ `config/` 三個設定檔
 
 ## ✅ 已完成（10-06）
 

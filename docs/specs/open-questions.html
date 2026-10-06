@@ -105,42 +105,59 @@
 <!-- ============ 問題 1 ============ -->
 <div class="q">
 <div class="q-hd">
-<h2><span class="no">問題 1</span>TaiwanStockPER 完整資料期間未確認 <span class="tag t-later">低</span></h2>
+<h2><span class="no">問題 1</span>TaiwanStockPER 完整資料期間 <span class="tag t-later">已解決</span></h2>
 </div>
 <div class="q-bd">
 
 <div class="q-part">
-<h4>問題點</h4>
-<p>2026-10-06 測試 22 查 <span class="f">TaiwanStockPER</span> 時指定了 <span class="f">start_date=2024-01-01</span>，回 667 筆。我當時把它記為「2024-01 起」，但<b>沒有測過不帶日期參數時的完整期間</b>。</p>
-<p>所以不清楚這個 dataset 是：</p>
-<ul>
-<li>只有 2024 年起（667 筆 ≈ 2.7 年）</li>
-<li>還是更早就有，只是我限定了範圍</li>
-</ul>
-<p class="muted">對照參考：<span class="f">TaiwanStockPrice</span> 有 11.7 年、<span class="f">TaiwanStockTradingDate</span> 有 6,936 日。
-若 PER 只有 2.7 年，明顯是後建的新 dataset。</p>
+<h4>問題點（已釐清）</h4>
+<p>測試 22 查 <span class="f">TaiwanStockPER</span> 時指定了 <span class="f">start_date=2024-01-01</span>，
+回 667 筆，因此記為「2024-01 起」。但當時<b>不知道 <span class="f">start_date</span> 是必填參數</b> ——
+不帶會回 400，所以「無日期參數」這個測試從來沒成立過。</p>
+<div class="box bad">
+<b>⚠️ 這正是「把查詢條件當成資料邊界」的陷阱。</b>
+我以為資料只到 2024，實際上是我自己把 <span class="f">start_date</span> 設成 2024。
+</div>
+</div>
+
+<div class="q-part">
+<h4>實測結果</h4>
+<pre><span class="c"># 不帶日期參數 → 400</span>
+GET .../TaiwanStockPER&amp;data_id=2330
+→ {{"msg":"start_date parameter is missing.","status":400}}
+
+<span class="c"># 放寬到 2000-01-01 → 5,186 筆</span>
+GET .../TaiwanStockPER&amp;data_id=2330&amp;start_date=2000-01-01
+→ <span class="n">2005-09-02 ～ 2026-10-05</span></pre>
+<table>
+<tr><th>dataset</th><th>期間</th><th>筆數</th></tr>
+<tr style="background:#1b1a15"><td><b><span class="f">TaiwanStockPER</span></b></td><td><b>2005-09-02 ～ 2026-10-05（21 年）</b></td><td><b>5,186</b></td></tr>
+<tr><td><span class="f">TaiwanStockPrice</span></td><td>2015-01 ～（11.7 年）</td><td>2,864</td></tr>
+</table>
+<div class="box ok">
+<b>結論：PER 歷史比日線長近 10 年。</b>
+「近一年平均 PE」隨時可算，日後若要做歷史 PE 分位數也有足夠資料。
+</div>
 </div>
 
 <div class="q-part">
 <h4>影響層面</h4>
 <table>
 <tr><th style="width:150px">模組</th><th>影響</th></tr>
-<tr><td><span class="f">metrics/</span></td><td>PE 提示若要用「近一年平均 PE」，需至少 1 年資料 → 2.7 年夠用</td></tr>
-<tr><td><span class="f">scoring/</span></td><td><b>無影響。</b>Tier 判定用總分，不用 PE</td></tr>
-<tr><td><span class="f">screening/</span></td><td><b>無影響。</b>PE 只提示不設門檻（§2.3）</td></tr>
-<tr><td><span class="f">app/</span></td><td>若使用者想看 PE 的歷史變化趨勢，深度受限</td></tr>
+<tr><td><span class="f">metrics/</span></td><td>✅ 無影響 — 21 年資料綽綽有餘</td></tr>
+<tr><td><span class="f">scoring/</span></td><td>✅ 無影響 — Tier 判定用總分，不用 PE</td></tr>
+<tr><td><span class="f">screening/</span></td><td>✅ 無影響 — PE 只提示不設門檻（§2.3）</td></tr>
+<tr><td><span class="f">app/</span></td><td>✅ 無影響 — 且意外開了「歷史 PE 分位數」的可能性</td></tr>
 </table>
-<p class="muted">關鍵：PE 在本系統<b>不參與任何篩選或評分</b>，只是顯示。所以期間長短不影響計算正確性，只影響「能看到多久的歷史」。</p>
 </div>
 
 <div class="q-part">
 <h4>範圍</h4>
 <div class="scope">
-<div><b>要動的檔案</b><span class="f">datasets.py</span> 註冊表<br><span class="f">data-source-verification.md</span> 補測試 23</div>
+<div><b>要動的檔案</b><span class="f">datasets.py</span> 註冊表<br>更新 <span class="f">data-source-verification.md</span></div>
 <div><b>要不要重寫架構</b><b class="muted">不要</b><br>純資料補充</div>
-<div><b>解法</b>不帶 <span class="f">start_date</span> 呼叫一次<br>看回傳筆數與最早日期</div>
+<div><b>狀態</b>✅ 已完成<br>紀錄於測試 23.1</div>
 </div>
-<p style="margin-top:12px"><b>驗證方式</b>：<span class="f">GET /api/v4/data?dataset=TaiwanStockPER&amp;data_id=2330</span> 無日期參數，看 <span class="f">data[0].date</span> 與 <span class="f">data[-1].date</span>。</p>
 </div>
 
 </div>
@@ -150,19 +167,26 @@
 <!-- ============ 問題 2 ============ -->
 <div class="q">
 <div class="q-hd">
-<h2><span class="no">問題 2</span>篩選條件全 AND 後剩幾檔未實算 <span class="tag t-hot">高</span></h2>
+<h2><span class="no">問題 2</span>篩選條件全 AND 後剩幾檔未實算 <span class="tag t-hot">高 · 待階段 2</span></h2>
 </div>
 <div class="q-bd">
 
 <div class="q-part">
 <h4>問題點</h4>
-<p>篩選條件是<b>四個條件全 AND</b>（§2）：</p>
+<div class="box bad">
+⚠️ <b>實測過程中發現的連帶問題：<span class="f">align_score</span> 沒有資料來源。</b><br>
+它依賴的維度 1／3／5 都還沒有客觀資料可算，
+所以這個條件<b>實際上根本沒辦法實作</b>。<br><br>
+→ <b>v1 實際可用的是三個條件，不是四個。</b>
+已從規格書 §2 的條件表移到 §11「v1 不實作」。
+</div>
+<p>篩選條件是<b>三個條件全 AND</b>（§2）：</p>
 <table>
-<tr><th>條件</th><th>門檻</th><th>篩掉什麼</th></tr>
-<tr><td>ROE（多年平均）</td><td>&gt; 使用者設定（假設 12%）</td><td>低 ROE 公司</td></tr>
-<tr><td>業外獲利比</td><td>∈ [0.8, 1.2]</td><td><b>業外損益過多或過少</b></td></tr>
-<tr><td>財務槓桿</td><td>&lt; 3.0</td><td>高槓桿公司</td></tr>
-<tr><td>align_score</td><td>&lt; 8.0</td><td>無法計算（依賴外部資料）</td></tr>
+<tr><th>條件</th><th>門檻</th><th>篩掉什麼</th><th>v1</th></tr>
+<tr><td>ROE（多年平均）</td><td>&gt; 使用者設定（假設 12%）</td><td>低 ROE 公司</td><td>✅ 可實作</td></tr>
+<tr><td>業外獲利比</td><td>∈ [0.8, 1.2]</td><td><b>業外損益過多或過少</b></td><td>✅ 可實作</td></tr>
+<tr><td>財務槓桿</td><td>&lt; 3.0</td><td>高槓桿公司</td><td>✅ 可實作</td></tr>
+<tr style="opacity:.55"><td><s>align_score</s></td><td>&lt; 8.0</td><td>—</td><td>❌ 無資料來源</td></tr>
 </table>
 <p><b>我從沒算過 2000 檔跑完會剩幾檔。</b>而「業外獲利比 ∈ [0.8, 1.2]」是個很窄的區間 —— 持有大額轉投資或金融資產的公司，業外損益 ÷ 稅前損益很容易超過 1.2。</p>
 <p class="muted">直覺估計：ROE&gt;12% 可能留下 600~800 檔，再交集 [0.8,1.2] 可能砍掉一半，槓桿&lt;3 再砍一些 → <b>可能剩 100~300 檔</b>。但這是猜的，沒有實算。</p>
@@ -215,22 +239,34 @@ n3 = <span class="f">n2</span>[leverage &lt; <span class="c">3</span>]          
 <!-- ============ 問題 3 ============ -->
 <div class="q">
 <div class="q-hd">
-<h2><span class="no">問題 3</span>官方產業代碼 → 名稱完整字典未取得 <span class="tag t-later">低</span></h2>
+<h2><span class="no">問題 3</span>官方產業代碼 → 名稱字典 <span class="tag t-block">確認官方無</span></h2>
 </div>
 <div class="q-bd">
 
 <div class="q-part">
-<h4>問題點</h4>
+<h4>問題點 + 實測確認（測試 23.2）</h4>
+<p>我原本懷疑字典能從既有 API 回應反推，所以實測兩個端點的產業欄位到底裝什麼。</p>
 <p>官方 API 給的是<b>股票清單帶產業代碼</b>，不是「代碼字典」：</p>
 <table>
-<tr><th>來源</th><th>已知</th></tr>
-<tr><td>TWSE <span class="f">t187ap03_L</span></td><td>1,095 列、33 種 distinct 代碼</td></tr>
-<tr><td>TPEx <span class="f">mopsfin_t187ap03_O</span></td><td>892 列、28 種 distinct 代碼</td></tr>
-<tr><td>兩邊共用</td><td>26 種重疊（同一套命名空間）</td></tr>
+<tr><th>來源</th><th>產業欄位實際值</th><th>distinct</th></tr>
+<tr><td>TWSE <span class="f">t187ap03_L</span></td><td><span class="f">產業別</span> → <b>數字代碼</b>（<span class="f">"01"</span>、<span class="f">"28"</span>）</td><td>33 種</td></tr>
+<tr><td>TPEx <span class="f">mopsfin_t187ap03_O</span></td><td><span class="f">SecuritiesIndustryCode</span> → <b>數字代碼</b></td><td>28 種</td></tr>
+<tr><td>兩邊共用</td><td colspan="2">26 種重疊（同一套命名空間）</td></tr>
 </table>
-<p>但<b>每個代碼的官方正式名稱</b>我只有部分：FinMind 名稱交叉比對到 5 個
-（運動休閒→37、居家生活→38、數位雲端→36、綠能環保→35、其他電子→31），
-其餘 28 個只知道代碼不知道名稱。</p>
+<div class="box bad">
+<b>結論：兩個端點的產業欄位都只有數字代碼，沒有中文名稱欄位。</b>
+→ <b>官方 open data 拿不到 code→name 字典</b>，需另尋來源（TWSE 官網的產業別分類表）。
+</div>
+<p>另兩個實測發現：</p>
+<ul>
+<li><b>出表日期已更新為 <span class="f">1151005</span>（2026-10-05）</b>，比 decision-log §1.2 記載的 <span class="f">1151004</span> 新一天
+→ <b>官方資料每日更新，測試結果有時效性</b></li>
+<li>官方 open data 回應格式與 FinMind <b>不同</b>：直接是 JSON 陣列，
+<b>沒有 <span class="f">{status, data}</span> 外層</b>，解析不可套 FinMind 格式（本次第一次解析就因此失敗）</li>
+</ul>
+<p>TPEx 另有可用欄位：<span class="f">Registration</span>（KY 開曼群島 30 檔）、
+<span class="f">ParValueOfCommonStock</span>（多數面值 10 元）、
+<span class="f">PreparationOfFinancialReportType</span>（1=788／2=104）</p>
 </div>
 
 <div class="q-part">
@@ -262,46 +298,51 @@ n3 = <span class="f">n2</span>[leverage &lt; <span class="c">3</span>]          
 <!-- ============ 問題 4 ============ -->
 <div class="q">
 <div class="q-hd">
-<h2><span class="no">問題 4</span>創新板交易限制內容未查證 <span class="tag t-later">低</span></h2>
+<h2><span class="no">問題 4</span>創新板交易限制內容 <span class="tag t-later">已解決</span></h2>
 </div>
 <div class="q-bd">
 
 <div class="q-part">
-<h4>問題點</h4>
-<p>§1 決策是「創新板股票納入系統，且篩選輸出時<b>必須標註</b>，因為其買賣規則與一般上市股不同」。</p>
-<p>但<b>「不同在哪」我查證不到</b>。決策紀錄 §2.5 註明：
-> ⚠️ 未查證：創新板的具體交易限制內容。spec 只寫 flag 機制，不寫法規細節。</p>
-<p>這是刻意的選擇 —— 法規會變動，應獨立成文件並引用官方來源，不寫進 spec。</p>
+<h4>原本的問題</h4>
+<p>§1 決策是「創新板股票納入系統，且篩選輸出時<b>必須標註</b>，因為其買賣規則與一般上市股不同」。
+但<b>「不同在哪」查不到</b>，決策紀錄 §2.5 註明為未查證。</p>
+</div>
+
+<div class="q-part">
+<h4>使用者決定</h4>
+<div class="box ok">
+<b>只需要標註是「創新版股票」就可以，差異在於買賣條件。</b>
+</div>
+<p>→ 不寫入任何具體法規內容。<b>v1 的輸出只做標註</b>，
+「買賣條件有差異」這件事由使用者自己知道即可，系統不負責解釋。</p>
+</div>
+
+<div class="q-part">
+<h4>這個決定解決了什麼</h4>
+<div class="box warn">
+原本的擔心想清楚了：這題最容易被「順手寫個大概」誤過去。
+決策紀錄已明確標為未查證，若介面先寫個猜的規則文案，
+會變成<b>沒有依據的權威陳述</b>—— 這比不寫更糟。
+</div>
+<p>使用者決定只標註，直接消除了這個風險：系統不對它沒查證的事下斷言。</p>
 </div>
 
 <div class="q-part">
 <h4>影響層面</h4>
 <table>
 <tr><th style="width:150px">模組</th><th>影響</th></tr>
-<tr><td><span class="f">transform/</span></td><td><b>無影響。</b><span class="f">is_innovation_board</span> flag 機制已定案（§1.5，37 檔全在 TWSE）</td></tr>
-<tr><td><span class="f">screening/</span></td><td><b>無影響。</b>創新板不另設篩選條件</td></tr>
-<tr><td><span class="f">app/</span></td><td><b>只影響提示文案。</b>要標註，但標什麼字需要查證</td></tr>
-<tr><td>使用者判斷</td><td>不知道限制內容，使用者可能用一般上市股的習慣操作</td></tr>
+<tr><td><span class="f">transform/</span></td><td>✅ 無變動 — <span class="f">is_innovation_board</span> flag 機制本來就已定案</td></tr>
+<tr><td><span class="f">screening/</span></td><td>✅ 無變動 — 創新板不另設篩選條件</td></tr>
+<tr><td><span class="f">app/</span></td><td>只輸出標記字串，不含法規說明</td></tr>
 </table>
-
-<div class="box">
-<b>影響可控的原因</b>：flag 機制本身已完整（判準、覆蓋率、資料來源都確定了），
-缺的只是「顯示什麼字」。這是文案工作，不是架構工作。
-</div>
 </div>
 
 <div class="q-part">
 <h4>範圍</h4>
 <div class="scope">
-<div><b>要動的檔案</b>獨立法規文件（<b>不寫進 spec</b>）<br><span class="f">app/</span> 提示文案</div>
-<div><b>要不要重寫架構</b><b class="muted">不要</b><br>文案 + 外部文件</div>
-<div><b>解法</b>查 TWSE／證交所官方規則<br>確認是否有一般化差異</div>
-</div>
-
-<div class="box warn">
-<b>注意：</b>這題最容易被「順手寫個大概」誤過去。
-決策紀錄已明確標為未查證，若介面先寫個猜的規則文案，會變成沒有依據的權威陳述。
-<b>寧可先寫「創新板股票，交易規則請見官方說明」，也不要寫未查證的具體規則。</b>
+<div><b>要動的檔案</b><span class="f">app/</span> 標註字串<br><b>不需</b>獨立法規文件</div>
+<div><b>要不要重寫架構</b><b class="muted">不要</b><br>原本就只有文案</div>
+<div><b>狀態</b>✅ 已完成<br>使用者已決定</div>
 </div>
 </div>
 
@@ -312,59 +353,87 @@ n3 = <span class="f">n2</span>[leverage &lt; <span class="c">3</span>]          
 <!-- ============ 問題 5 ============ -->
 <div class="q">
 <div class="q-hd">
-<h2><span class="no">問題 5</span>token 與額度上限的關係未驗證 <span class="tag t-hot">中</span></h2>
+<h2><span class="no">問題 5</span>token 與額度上限的關係 <span class="tag t-later">已解決</span></h2>
 </div>
 <div class="q-bd">
 
 <div class="q-part">
-<h4>問題點</h4>
-<p>舊 spec 說免費方案是 <b>600 次/小時</b>，一天 14,400 次，所以全量抓取要 <b>1.6 天</b>。這個數字影響很大。</p>
-<p>但實測發現兩件事：</p>
-<ul>
-<li><b>多數 dataset 免 token 就能抓</b>（§6.1 全部清單）</li>
-<li><b>20 次連續請求沒觸發 rate limit</b>（測試 21.2），<span class="muted">實際限制比預期寬鬆</span></li>
-<li><b>無 token 無法查額度</b>：<span class="f">/user_info</span> v4 回 404、v2 回 200 但 body 是「請輸入 token」</li>
-</ul>
-<p>所以不知道：<b>免 token 的請求，額度上限是 600/小時，還是更低？</b></p>
+<h4>原本的問題</h4>
+<p>舊 spec 說免費方案是 <b>600 次/小時</b>，全量抓取要 <b>1.6 天</b>。
+但實測發現多數 dataset 免 token 就能抓，且 20 次連續請求沒觸發 rate limit，
+所以不知道<b>免 token 的請求，額度上限到底是多少</b>。</p>
+<p class="muted">使用者的判斷：「無法知道，只能實際抓取試試看」—— 這個判斷是對的。</p>
+</div>
+
+<div class="q-part">
+<h4>實測結果</h4>
+<pre><span class="c"># 60 次連續請求，不帶 token、不加 sleep、逐檔遞增 data_id</span>
+→ <span class="n">60/60 成功，0 失敗，總耗時 12.0 秒</span>
+→ 平均每次 0.20 秒，實際約 <span class="n">5 requests/秒</span></pre>
+
+<div class="box bad">
+<b>這推翻了一整段舊設計。</b>
+<table style="margin-top:8px">
+<tr><th>項目</th><th>舊 spec 假設</th><th>實測</th></tr>
+<tr><td>免費額度</td><td>600 次/小時（0.167/秒）</td><td><b>5 requests/秒</b></td></tr>
+<tr><td>節流間隔</td><td>每 7.2 秒一次</td><td>可無節流</td></tr>
+<tr><td>全量抓取耗時</td><td>約 1.6 天</td><td><b>約 40 分鐘</b></td></tr>
+</table>
+<span class="muted">實測速率是舊 spec 預估的 30 倍。</span>
+</div>
+
+<b>額度端點再測結果：</b>
+<table>
+<tr><th>端點</th><th>結果</th></tr>
+<tr><td><span class="f">api.finmindtrade.com/api/v3/data</span></td><td>404 <span class="f">{"detail":"Not Found"}</span></td></tr>
+<tr><td><span class="f">api.finmindtrade.com/api/v4/data</span></td><td>200 success（正常取資料）</td></tr>
+<tr><td><span class="f">api.web.finmindtrade.com/api/v4/user_info</span></td><td><b>404 <span class="f">404 page not found</span></b>（純文字，非 API 錯誤）</td></tr>
+</table>
+<div class="box">
+⚠️ <b><span class="f">api.web.finmindtrade.com</span> 沒有 <span class="f">/v4</span> 路徑</b>，
+舊 spec §4.3 記載的 <span class="f">v2/user_info</span> 是該網域唯一可能路徑。
+</div>
+</div>
+
+<div class="q-part">
+<h4>⚠️ 但不能推論「沒有額度限制」</h4>
+<div class="box warn">
+60 次不夠撞出每小時上限。<b>不建議為了測上限去撞牆</b> ——
+官方政策明載累積大量 4xx 請求會封鎖 IP <b>30 分鐘</b>。
+</div>
+<p>實務判斷：60 次無節流已足夠把抓取規劃從 1.6 天縮到數十分鐘，
+額度真到上限時抓取途中會自然遇到（402），屆時再處理。
+<b>測試階段不追求撞出上限。</b></p>
+</div>
+
+<div class="q-part">
+<h4>連帶修正：舊 spec 的一條錯誤設計紀錄</h4>
+<div class="box bad">
+舊 spec §6.2 寫著「先前建議併發 5~10 是錯的，已收回」，
+收回的<b>理由是「瓶頸是帳號額度 0.167/秒，併發只會瞬間燒光當小時額度後吃 402」</b>。<br><br>
+<b>這個理由已被實測推翻</b> —— 免 token 時可跑 5 requests/秒。
+</div>
+<p><b>但「不建議併發」的結論仍保留</b>，理由改為避免瞬間吃 402，
+並把節流間隔大幅放寬。改的是理由，不是結論。</p>
 </div>
 
 <div class="q-part">
 <h4>影響層面</h4>
 <table>
 <tr><th style="width:150px">模組</th><th>影響</th></tr>
-<tr><td><span class="f">core/finmind_client.py</span></td><td><b>速率控制參數。</b>7.2 秒/次 是照 600/小時 算的，若上限更低要調慢</td></tr>
-<tr><td><span class="f">storage/sync_state.py</span></td><td>抓取耗時估算 → 續跑點設計的實際價值</td></tr>
-<tr><td>掛機時間</td><td>1.6 天是規劃基礎，若變 3 天就要調整維護時段處理</td></tr>
-<tr><td>token 管理</td><td>若免 token 額度夠用，<b>7 天過期問題完全消失</b>，§4 整節可大幅簡化</td></tr>
+<tr><td><span class="f">core/finmind_client.py</span></td><td>速率參數可放寬（原每 7.2 秒一次）</td></tr>
+<tr><td><span class="f">storage/sync_state.py</span></td><td>抓取耗時估算從 1.6 天降到數十分鐘，續跑機制的重要性下降</td></tr>
+<tr><td>token 管理（<span class="f">.env</span>／7 天倒數／換 token）</td><td><b>可能整個不需要</b> —— 待實際抓取時確認是否會碰到 402</td></tr>
+<tr><td>舊 spec §4（Token 機制整節）</td><td>若全程免 token 即可完成，該節可刪</td></tr>
 </table>
-
-<div class="box warn">
-<b>雙向影響</b>：<br>
-• 若免 token 就夠 → <span class="f">.env</span>、token 倒數、換 token 流程<b>全部不需要</b>，架構更簡單<br>
-• 若免 token 不夠 → 必須用 token，7 天週期性更換，掛機抓取要中斷續跑
-</div>
 </div>
 
 <div class="q-part">
 <h4>範圍</h4>
 <div class="scope">
-<div><b>要動的檔案</b><span class="f">core/finmind_client.py</span> 速率參數<br><span class="f">spec §4</span>（若免 token 夠用可整節刪）</div>
-<div><b>要不要重寫架構</b><b class="muted">通常不用</b><br>改參數即可，但 §4 可能整節不需要</div>
-<div><b>解法</b>用帶 token 的方式<br>打 <span class="f">/user_info</span> 看實際額度</div>
-</div>
-
-<p style="margin-top:14px"><b>驗證方式</b>：</p>
-<pre><span class="c"># 有 token 時，回應會帶實際額度欄位</span>
-GET https://api.web.finmindtrade.com/v2/user_info
-Authorization: Bearer {token}
-→ { user_count, <span class="n">api_request_limit</span> }</pre>
-
-<p>拿到 <span class="f">api_request_limit</span> 的實際數值後，就能知道免費層的真實上限。
-若需要 token 才能測，則取一個 token（免費自助，7 天有效）即可，不必付費。</p>
-
-<div class="box bad">
-<b>⚠️ 成本很低但容易被跳過。</b>這題只要一個免費 token 就能完全解決，
-而且可能讓整個 token 管理機制消失。<b>建議在階段 1 一開始就測掉。</b>
+<div><b>要動的檔案</b><span class="f">core/finmind_client.py</span> 速率參數<br><span class="f">spec §8.5</span></div>
+<div><b>要不要重寫架構</b><b class="muted">通常不用</b><br>改參數；§4 可能整節不需要</div>
+<div><b>狀態</b>✅ 已完成<br>紀錄於測試 23.3</div>
 </div>
 </div>
 
@@ -372,19 +441,41 @@ Authorization: Bearer {token}
 </div>
 
 
-<h2>建議處理順序</h2>
+<h2>建議處理順序（實測後更新）</h2>
 <table>
-<tr><th style="width:34px">順序</th><th>動作</th><th>時機</th><th>理由</th></tr>
-<tr><td>1</td><td><b>#5</b> 實測 token 額度</td><td>階段 1 開始前</td><td>成本最低（一個免費 token），但可能簡化整個 §4 架構</td></tr>
-<tr><td>2</td><td><b>#1</b> 測 PER 完整期間</td><td>階段 1 抓取時順便</td><td>不帶日期參數打一次就知</td></tr>
-<tr><td>3</td><td><b>#3</b> 補產業代碼字典</td><td>階段 2 前</td><td>開始編輯 CAGR 對照表之前補上</td></tr>
-<tr><td>4</td><td><b>#2</b> 實算篩選剩幾檔</td><td>階段 2 財務指標算完後</td><td>需要 ROE／業外比／槓桿都算得出來才能算</td></tr>
-<tr><td>5</td><td><b>#4</b> 查創新板規則</td><td>階段 4 介面</td><td>只有文案需要，不急</td></tr>
+<tr><th style="width:34px">#</th><th>狀態</th><th>處理</th></tr>
+<tr>
+  <td>1</td><td><span class="tag t-later">已解決</span></td>
+  <td>PER 完整期間 → <b>21 年，比日線長 10 年</b>（測試 23.1）</td>
+</tr>
+<tr>
+  <td>5</td><td><span class="tag t-later">已解決</span></td>
+  <td>額度 → <b>免 token 5 requests/秒，舊 spec 的 600/小時前提不成立</b>（測試 23.3）</td>
+</tr>
+<tr>
+  <td>4</td><td><span class="tag t-later">已解決</span></td>
+  <td>創新板 → <b>只標註不寫規則</b>（使用者決定）</td>
+</tr>
+<tr>
+  <td>3</td><td><span class="tag t-block">待處理</span></td>
+  <td>產業字典 → <b>官方 open data 確認拿不到</b>，v1 用 FinMind 名稱做顯示 fallback</td>
+</tr>
+<tr>
+  <td>2</td><td><span class="tag t-hot">待處理</span></td>
+  <td>篩選剩幾檔 → <b>等階段 2 財務指標算完再實算</b>，逐條件印出收窄數</td>
+</tr>
 </table>
 
-<div class="box ok" style="margin-top:20px">
-<b>結論</b>：5 項中只有 <b>#2 有實質架構風險</b>，且必須等財務指標算完才能驗證（階段 2）。
-其餘 4 項都是低成本可解的補充工作。<b>沒有任何一項阻擋階段 0（專案骨架）。</b>
+<div class="box bad" style="margin-top:20px">
+<b>#2 是唯一有實質架構風險的一項。</b>
+而且實測過程中發現它的<b>連帶問題</b>：<span class="f">align_score</span> 沒有資料來源
+（依賴的維度 1／3／5 都還沒有客觀資料可算），所以 v1 實際可用的是
+<b>三個篩選條件不是四個</b>。已從規格書 §2 移到 §11「不實作」。
+</div>
+
+<div class="box ok">
+<b>結論</b>：5 項中 3 項已解決，2 項待處理且<b>都不阻擋階段 0（專案骨架）</b>。
+#2 需等階段 2 才能驗證；#3 只影響介面顯示文字。
 </div>
 
 <p style="margin-top:30px"><a href="2026-10-06-stock-screener-spec.html">← 回規格書</a> ｜

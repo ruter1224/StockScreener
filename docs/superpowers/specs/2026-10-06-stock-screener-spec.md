@@ -8,7 +8,7 @@
 > **本文件與決策紀錄的分工**
 > 本文件是**實作依據**，描述系統「是什麼、長怎樣」。
 > `2026-10-05-decision-log.md` 是**決策來源**，記錄每個決定的理由與查證過程。
-> 詞彙定義見 `CONTEXT.md`。
+> 詞彙定義見 `GLOSSARY.md`。
 
 ---
 
@@ -580,7 +580,7 @@ Streamlit。三個主要頁面：
 
 | 文件 | 內容 |
 |---|---|
-| `CONTEXT.md` | 領域詞彙表 |
+| `GLOSSARY.md` | 領域詞彙表 |
 | `docs/superpowers/specs/2026-10-05-decision-log.md` | 決策紀錄（理由與查證過程）|
 | `docs/review/data-source-verification.md` | 資料來源實測記錄（22 項測試）|
 | `docs/review/conflict-review.html` | 架構衝突比對 |

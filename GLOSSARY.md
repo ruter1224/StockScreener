@@ -1,4 +1,4 @@
-# CONTEXT.md — Stock Screener 領域詞彙表
+# GLOSSARY.md — Stock Screener 領域詞彙表
 
 本文件是**詞彙表**，只記錄「詞的意思」與已定案的用法，不記錄實作細節或決策理由。
 決策理由見 `docs/superpowers/specs/2026-10-06-stock-screener-spec.md` 與

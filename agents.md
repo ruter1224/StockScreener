@@ -68,7 +68,7 @@
 .
 ├── agents.md                   ← 本檔（路線圖，少改）
 ├── handoff.md                  ← 當前進度（頻繁更新）
-├── CONTEXT.md                  ← 領域詞彙表
+├── GLOSSARY.md                 ← 領域詞彙表
 ├── README.md                   ← 抓取操作說明
 ├── pyproject.toml / .python-version / uv.lock / pyrightconfig.json
 │
@@ -105,7 +105,7 @@
 
 | 文件 | 回答什麼 | 變動頻率 |
 |---|---|---|
-| `CONTEXT.md` | 「詞是什麼意思」 | 低 |
+| `GLOSSARY.md` | 「詞是什麼意思」 | 低 |
 | `docs/superpowers/specs/2026-10-06-stock-screener-spec.md` | 「系統長怎樣」→ **實作依據** | 中 |
 | `docs/superpowers/specs/2026-10-05-decision-log.md` | 「為什麼這樣決定」 | 低 |
 | `docs/review/data-source-verification.md` | 「實測結果」 | 中 |
@@ -248,7 +248,7 @@ uv run ruff check src fetch.py monitor.py run_all.py tests   # 應 clean
 | 規格書（現行） | `docs/superpowers/specs/2026-10-06-stock-screener-spec.md` |
 | 決策紀錄 | `docs/superpowers/specs/2026-10-05-decision-log.md` |
 | 資料來源實測 | `docs/review/data-source-verification.md` |
-| 詞彙表 | `CONTEXT.md` |
+| 詞彙表 | `GLOSSARY.md` |
 | 未解問題分析 | `docs/specs/open-questions.html` |
 | 抓取說明 | `README.md` |
 | Obsidian | `OpenCode專區/StockScreener/<日期>.md` |

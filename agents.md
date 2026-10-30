@@ -31,7 +31,7 @@
 - [x] `run_all.py`（依退出碼自動等待重試＋Windows 通知＋`ALL_DONE` 閘門）
 - [x] `monitor.py`（進度儀表板，只讀 DB，:8765）
 - [x] `tests/test_fetch.py` ＋ `tests/test_run_all.py`（69 個測試）
-- [ ] **全量抓取**（DESKTOP-5241OJK 執行中，2026-10-06 22:04 重啟後續傳）
+- [x] **全量抓取**（完成於 2026-10-07，`logs/ALL_DONE.txt` 為證據，資料在 `E:\OpenCode\Stock Screener(股票篩選)\data\`）
 
 ### ⬜ 階段 2：財務指標計算
 
@@ -144,6 +144,7 @@ uv run ruff check --fix src fetch.py monitor.py run_all.py tests  # 自動修
 | # | 路徑 | 機器 | 說明 |
 |---|---|---|---|
 | 1 | `repo 根目錄/.venv` | DESKTOP-5241OJK | 本機 VENV，由 `uv sync` 建立（2026-10-06 專案搬到此機時重建）|
+| 2 | `E:\OpenCode\Stock Screener(股票篩選)\.venv` | LAP2021-T153 | 主要開發機 VENV，由 `uv sync` 建立（2026-10-30 重建）|
 
 ⚠️ 換電腦時用 `uv sync` 重建，不要複製此路徑。
 
@@ -155,8 +156,8 @@ uv run ruff check --fix src fetch.py monitor.py run_all.py tests  # 自動修
 
 | 機器 | 預定任務 |
 |---|---|
-| **DESKTOP-5241OJK** | **全量抓取跑到完**（唯一執行抓取的機器）|
-| LAP2021-T153 | 只做程式開發，**不抓取**（額度會共用）|
+| **DESKTOP-5241OJK** | 抓取機（資料正本，額度共用，僅此機可抓）|
+| LAP2021-T153 | **主要開發機**，路徑 `E:\OpenCode\Stock Screener(股票篩選)`，已有完整 data/ |
 
 ### 資料搬運規則（2026-10-06 定案）
 

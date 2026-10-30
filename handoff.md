@@ -2,7 +2,7 @@
 
 ## ⚡ 一句話摘要
 
-**階段 1 完成（全量抓取進行中 DESKTOP-5241OJK）*
+**階段 1 完成（全量抓取已完成，資料在 `E:\OpenCode\Stock Screener(股票篩選)\data\`）*
 
 - **藍圖**：`agents.md`（路線圖、陷阱、常用指令）
 - 程式碼：`fetch.py`（退出碼契約）、`run_all.py`（自動重試）、`monitor.py`（進度 UI）、`src/`
@@ -31,12 +31,10 @@
 
 ## 📍 目前狀態
 
-- **全量抓取進行中**（2026-10-06 22:04 重啟後續傳），在 DESKTOP-5241OJK
-  - 進度儀表板：TaiwanStockFinancialStatements **1722/2037（84.5%）*，Error=0
-  - 6 個 per-stock dataset 仍在跑（只剩 Price 約 315 檔未抓 + 6 個錯誤待重試）
-  - 進度儀表板網址 **<http://127.0.0.1:8765/>**，每 5 秒自動刷新或 `uv run python fetch.py --status`
-  - 7 個 dataset 全部回 0 才寫 `logs/ALL_DONE.txt`，這才是完成的證據
-  - 即時 log：`logs/run_all-20261006-2204.log` 或 `logs/runner.out.log`
+- **全量抓取已完成**（`logs/ALL_DONE.txt`，2026-10-07 23:06，耗時 5.0 小時）
+  - 資料正本在本機 `E:\OpenCode\Stock Screener(股票篩選)\data\`（sync_state.db + raw/）
+  - 7 個 dataset 全部回 0，ALL_DONE.txt 為完成證據
+  - 下一步：進入階段 2（財務指標計算）
 - **Git**：`master` = `origin/master`，無未提交改動
 - **Chezmoi**：無需要同步的變動
 
@@ -57,8 +55,8 @@ python 程序。真正 PID 請用工作管理員或本機 `netstat` 查看。
 
 | 機器 | 路徑 | 角色 |
 |---|---|---|
-| **DESKTOP-5241OJK** | `E:\OpenCode\Stock Screener(股票篩選)` | **主力機：抓取中、Data 唯一正本** |
-| 本機（LAP2021-T153）| 從雲端讀取 | 僅程式開發；data/ 不可寫入 |
+| **DESKTOP-5241OJK** | `E:\OpenCode\Stock Screener(股票篩選)` | 抓取機（資料正本）|
+| 本機（LAP2021-T153）| `E:\OpenCode\Stock Screener(股票篩選)` | **主要開發機**；已有完整 data/（`logs/ALL_DONE.txt` 2026-10-07）|
 
 `data/`（含 `sync_state.db` 與 parquet）*永不進版控*，兩台各自獨立
 （`data/` 被雲端同步時會導致 db 與檔案分離）。VENV 也是 repo 根目錄。
@@ -67,9 +65,12 @@ python 程序。真正 PID 請用工作管理員或本機 `netstat` 查看。
 
 本機電腦應該用 `git` 同步程式碼，**不要複製 data/***！即使你想用雲端同步檔，也只能同步「程式碼（含 `.git`）+ 套件」，而 `data/` 要用**一次性 zip 快照**搬到另一台電腦。
 
-### 抓取說明（本機無 data/ 時）
+### 抓取說明（本機已有 data/）
 
-本機電腦應該做：`git pull` + `uv sync`（安裝套件）即可，但**無法看到抓取進度**，因為 `data/sync_state.db` 是兩台電腦各自獨立。
+本機（LAP2021-T153）的 `E:\OpenCode\Stock Screener(股票篩選)` 已有完整抓取資料
+（`data/` + `logs/ALL_DONE.txt`，完成於 2026-10-07）。
+程式碼同步走 git，資料不同步（兩台各自獨立，但本機已有完整副本）。
+若需重新抓取，僅能在 DESKTOP-5241OJK 執行（FinMind 額度帳號層級共用）。
 
 ### 資料搬運（全量抓完後）
 
@@ -93,9 +94,10 @@ python 程序。真正 PID 請用工作管理員或本機 `netstat` 查看。
 （Google Drive 的 Filestream 會建立本地虛擬路徑）。所以 `git clone` / `git pull` 時要確認專案路徑
 （用 `pwd` 看目前路徑，確認是否為正確的雲端路徑）。
 
-⚠️ **本機電腦收工注意**：2026-10-06 之後，此專案路徑正確，但 `data/` 仍在 DESKTOP-5241OJK。
-本機電腦的 `git status` 會顯示未追蹤檔案（`data/` 目錄不存在是正常的，因為 data/ 是不同步的）。
-**不要嘗試在本機建立 data/ 目錄或抓取**，因為 FinMind 的 600 次/小時額度是帳號層級的，兩台不能同時抓。
+⚠️ **本機電腦路徑**：2026-10-30 起，本機（LAP2021-T153）的主要工作路徑改為
+`E:\OpenCode\Stock Screener(股票篩選)`（本機磁碟，不再走 Google Drive 同步）。
+`data/` 已存在且完整（抓取完成於 2026-10-07），`git status` 不會顯示 data/（gitignored）。
+程式碼同步走 git push/pull；資料不走版控、不走雲端同步。
 
 ## 📦 同步規則（2026-10-06 兩台確認後）
 
@@ -249,15 +251,12 @@ DB 內容可能比 log 更即時，但內容可能不一致（例如 log 還沒�
 
 ## 🕐 最後更新
 
-- 日期：2026-10-29
+- 日期：2026-10-30
 - 更新者：OpenCode @ **LAP2021-T153**
-- HEAD：`3730584`
-- Git push：✅ 已推（local == origin/master，behind/ahead = 0/0）
-- Chezmoi push：—（無變動，`chezmoi status` 與 `chezmoi git -- status` 均乾淨）
-- 驗證：✅ 69 個測試全過（`uv run python -m unittest discover tests` → `Ran 69 tests / OK`）
+- 主要工作路徑：`E:\OpenCode\Stock Screener(股票篩選)`（本機磁碟，不再走 Google Drive）
+- HEAD：`0361d27`（git pull 後 local == origin/master，behind/ahead = 0/0）
+- 抓取狀態：✅ 已完成（`logs/ALL_DONE.txt`，2026-10-07 23:06，資料在 `data/`）
+- 驗證：✅ 74 個測試全過（`uv run python -m unittest discover tests` → `Ran 74 tests / OK`）
 - 驗證：✅ ruff clean（`uv run ruff check src fetch.py monitor.py run_all.py tests`）
-- 驗證：✅ 規格書更新（本次修改 §1.4、§2、§2.1、§3.2、§9.2、§11 共 8 處）
-- 驗證：✅ 本機無 data/ 目錄（正常，資料在 DESKTOP-5241OJK）
-- 驗證：✅ 本機無抓取程式執行中（正常，抓取只在 DESKTOP-5241OJK 執行）
-- 驗證：✅ `E:\OpenCode` 路徑正常，無編碼問題（`篩選` 兩字正確）
-- 驗證：✅ Obsidian 筆記夾正常（282 字 + `歷史日誌.md` 976 字）
+- 驗證：✅ `E:\OpenCode\Stock Screener(股票篩選)` 路徑正常，無編碼問題（`篩選` 兩字正確）
+- 驗證：✅ venv 已重建（`uv sync`，pandas 3.0.6）
